@@ -24,7 +24,7 @@ Show the **bounding-box footprint of each map** on a global base map (Google Ear
 ## 3. MVP Scope
 
 ### In scope
-- Scan a local folder (recursively) for PDF and image maps
+- Copy PDF and image maps from anywhere on disk into one flat library folder (`atlas add`), and scan that
 - Record metadata and georeferencing where it exists (recorded; not used for the box by default)
 - Compute one **bounding box** per map (min/max lat/lon, WGS84)
 - Store results in a Medallion-style pipeline (bronze, silver, gold)
@@ -66,26 +66,26 @@ The pipeline only works if each map has a location. By format:
 ## 5. Pipeline Architecture (Medallion)
 
 ```
-Local folder ──► BRONZE ──► SILVER ──► GOLD ──► Viewer
- (raw files)    (inventory)  (cleaned,   (display-
-                             standard)    ready)
+Maps anywhere ──► LIBRARY ──► BRONZE ──► SILVER ──► GOLD ──► Viewer
+ (originals,      (flat folder  (inventory)  (cleaned,   (display-
+  untouched)       of copies)                standard)    ready)
 ```
 
 ### Bronze: raw, as-found
-**Purpose:** record what exists, untouched. Re-runnable, nothing lost.
+**Purpose:** record what is in the library, untouched. Re-runnable. Mirrors the library: a map deleted from the library is dropped from the inventory.
 
 Table `bronze.file_inventory`
 
 | Column | Notes |
 |---|---|
 | `file_id` | SHA-256 of file contents (also detects duplicates). Not unique; `file_path` is the key |
-| `file_path` | Absolute path |
-| `file_name`, `extension` | |
+| `file_path` | Absolute path of the library copy |
+| `file_name`, `extension` | `file_name` is the map's original name |
 | `size_bytes`, `modified_at` | |
 | `ingested_at` | When the row was first recorded, or the file last changed |
 | `raw_metadata` | Metadata read from inside the file, stored as-is (JSON): pypdf for PDFs, rasterio for rasters. Originally planned as `gdalinfo -json`; standalone GDAL is not installed |
 
-Source files are **never modified or moved**.
+Source files are **never modified or moved**; they are copied into `library/` as `<original name>__<hash start>.<ext>`, with `library/index.csv` recording where each came from.
 
 ### Silver: cleaned and standardized
 **Purpose:** one trustworthy row per map, in a consistent coordinate system.
@@ -200,14 +200,16 @@ map-library-atlas/
 │   ├── map_manifest.example.csv
 │   └── map_manifest.csv       # personal, gitignored
 ├── src/atlas/
-│   ├── cli.py                 # `atlas census`, `atlas run`, `atlas view`
+│   ├── cli.py                 # `atlas census`, `atlas add`, `atlas run`, `atlas view`
 │   ├── config.py              # reads config.yaml
 │   ├── census.py              # read-only folder report
 │   ├── metadata.py            # reads raw metadata from inside a file
-│   ├── bronze.py              # scan folder, hash, inventory
+│   ├── library.py             # copy maps into the library, keep index.csv
+│   ├── bronze.py              # scan library, hash, inventory
 │   ├── manifest.py            # reads and maintains the manual CSVs
 │   ├── silver.py              # resolve bbox, validate
 │   └── gold.py                # gold tables, GeoJSON and to-do list export
+├── library/                   # gitignored: the atlas's copies of the maps + index.csv
 ├── data/                      # gitignored
 │   ├── atlas.duckdb
 │   ├── bronze/ silver/ gold/
@@ -221,7 +223,7 @@ map-library-atlas/
     └── DEVELOPER.md
 ```
 
-`.gitignore`: `data/`, `config.yaml`, `config/map_manifest.csv`, and map file types. **Never commit map files or personal paths.**
+`.gitignore`: `library/`, `data/`, `config.yaml`, `config/map_manifest.csv`, and map file types. **Never commit map files or personal paths.**
 
 ---
 
@@ -233,7 +235,8 @@ map-library-atlas/
 3. **Silver:** done for manual boxes and region defaults, with validation and status flags. Embedded georeferencing is implemented but switched off.
 4. **Gold:** done. GeoJSON export and needs-review list.
 5. **Viewer:** done. Base map, bbox layer, click popup listing all maps under the point.
-6. **Polish:** partly done. Docs, tests and incremental bronze exist. Open items are listed in `docs/DEVELOPER.md` section 12 (removed files, duplicates, same-named files, multi-page PDFs, scale).
+6. **Polish:** partly done. Docs, tests and incremental bronze exist. Open items are listed in `docs/DEVELOPER.md` section 12 (duplicates, same-named files in the manifest, multi-page PDFs, scale).
+7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done. Next: several place labels per map with a ready-made list of countries and US states, publisher and source link; then add-and-label screens in the browser.
 
 **MVP done when:** I run one command and see rectangles for all my located maps on a global map, plus a list of the ones I still need to locate. **Met for the test folder** (`atlas run`, then `atlas view`). Not yet run on the full library.
 
@@ -249,7 +252,7 @@ map-library-atlas/
 - [x] Viewer: a local web page, started with `atlas view`.
 - [ ] How should multi-page PDFs be handled (one map per page)?
 - [ ] Should approximate (region-default) boxes look different in the viewer?
-- [ ] How should a map removed from the folder be handled?
+- [x] How should a removed map be handled? Deleting it from `library/` drops it from the atlas.
 
 ---
 

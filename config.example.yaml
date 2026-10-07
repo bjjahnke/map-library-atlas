@@ -1,7 +1,10 @@
 # Copy to config.yaml (gitignored) and edit.
 
-# Folder scanned recursively for maps. Start with the small test subset (Phase 0).
+# Only used by `atlas census` (a read-only count of a folder). Optional.
 maps_folder: /path/to/your/test-maps
+
+# The atlas's own copy of every map, filled by `atlas add`. One flat folder.
+library_dir: library
 
 # Pipeline outputs (bronze/silver/gold live under here).
 data_dir: data

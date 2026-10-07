@@ -10,7 +10,7 @@ All commands are typed in a terminal, from the project folder.
 
 ## The short version
 
-1. Put the new map files in your maps folder.
+1. Run `.venv/bin/atlas add "/path/to/new/maps"` (a file or a whole folder).
 2. Run `.venv/bin/atlas run`
 3. Open `config/map_manifest.csv` and fill in the new rows at the bottom.
 4. Run `.venv/bin/atlas run` again.
@@ -22,14 +22,27 @@ That's it. The rest of this page explains each step.
 
 ## Step by step
 
-### 1. Put the map files in your maps folder
+### 1. Add the maps to the library
 
-Copy or save the new maps into the folder the atlas scans. Sub-folders are fine; it
-looks inside them too. The folder's location is the `maps_folder` line in `config.yaml`.
+Your maps can be anywhere on your computer, in any folders. Point the atlas at a single
+file, several files, or a whole folder (it looks inside sub-folders too):
+
+```bash
+.venv/bin/atlas add "/path/to/new/maps"
+```
+
+Tip: type `.venv/bin/atlas add ` and then drag the file or folder from Finder into the
+terminal window. That fills in the path for you.
+
+The atlas copies each map into its own `library/` folder. Your originals are never
+changed, moved or renamed. It prints what happened:
+
+```
+Added to the library:   3
+Already in the library: 26     <- maps it already had are skipped, so re-adding is harmless
+```
 
 Accepted file types: `.pdf`, `.jpg`, `.jpeg`, `.png`, `.tif`, `.tiff`.
-
-The atlas never changes, moves or renames your map files.
 
 ### 2. Let the atlas notice them
 
@@ -141,22 +154,18 @@ not the map's own.
 | Park a map for later | Type `yes` in `revisit`. |
 | Un-park a map | Clear the `revisit` cell. |
 | See what still needs doing | Open `data/gold/needs_review.csv`. |
+| Remove a map from the atlas | Delete its file from the `library/` folder. |
 
 Never edit the files inside `data/`. They are rebuilt on every run and your changes
-would be lost.
+would be lost. Don't rename files inside `library/` either; add and delete only.
 
 ---
 
-## Scanning a different or bigger folder
+## Starting over with an empty atlas
 
-Open `config.yaml` and change the `maps_folder` line to the folder you want.
-
-- Pointing at a folder that **contains** the old one (for example moving up from
-  `Wisconsin` to `United States`) just adds the extra maps. Your existing notes carry over.
-- Pointing at a **completely different** folder keeps the old maps in the list too,
-  because the atlas does not forget files it has seen. To start clean, delete the file
-  `data/atlas.duckdb` and run `.venv/bin/atlas run`. That file is made by the atlas and
-  is safe to delete; your notes file is not affected.
+Delete everything inside `library/` and delete the file `data/atlas.duckdb`, then add
+maps again. Both are made by the atlas. Your original maps and your notes file are not
+affected.
 
 ---
 
@@ -170,6 +179,8 @@ Open `config.yaml` and change the `maps_folder` line to the folder you want.
 | "region '...' is not in regions.csv" | The region key is misspelled or not defined. | Fix the spelling, or add the region. |
 | "bounding box has no area" | West/east or south/north are swapped. | Swap them back. Remember US longitudes are negative. |
 | "latitude outside..." or "longitude outside..." | Latitude and longitude are in each other's columns. | `lon` columns hold the east-west numbers, `lat` the north-south ones. |
+| `atlas run` says the library is empty | No maps have been added yet. | `.venv/bin/atlas add <file or folder>` |
+| `atlas add` says "Not found" | The path is mistyped. | Drag the file or folder into the terminal instead of typing it. |
 | My notes seem to be ignored | The file wasn't saved as CSV, or wasn't saved at all. | Export as CSV over the original file, then run again. |
 | Globe says "No map file found" | The atlas hasn't been run yet. | `.venv/bin/atlas run` |
 | `atlas view` says it could not start | The viewer is already running in another terminal. | Use that one, or run `.venv/bin/atlas view --port 8001`. |
@@ -194,4 +205,4 @@ python3 -m venv .venv
 cp config.example.yaml config.yaml
 ```
 
-Then open `config.yaml` and set `maps_folder` to the folder holding your maps.
+Then add your first maps as described at the top of this page.

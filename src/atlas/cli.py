@@ -1,4 +1,4 @@
-"""Command line entry point: `atlas census`, `atlas run`."""
+"""Command line entry point: `atlas census`, `atlas add`, `atlas run`, `atlas view`."""
 
 from __future__ import annotations
 
@@ -11,13 +11,14 @@ import sys
 import webbrowser
 from pathlib import Path
 
-from atlas import gold, silver
+from atlas import gold, library, silver
 from atlas.bronze import build_inventory, export_csv, read_inventory
 from atlas.census import format_report, run_census
 from atlas.config import (
     DEFAULT_CONFIG_PATH,
     ConfigError,
     data_dir,
+    library_dir,
     load_config,
     manifest_csv,
     maps_folder,
@@ -36,7 +37,10 @@ def _build_parser() -> argparse.ArgumentParser:
     census.add_argument("--json", action="store_true", help="print the full census as JSON")
     census.add_argument("-v", "--verbose", action="store_true", help="list every file")
 
-    sub.add_parser("run", help="update the list of maps (later: the full pipeline)")
+    add = sub.add_parser("add", help="copy maps into the library (originals are not touched)")
+    add.add_argument("paths", type=Path, nargs="+", help="map files, or folders of maps")
+
+    sub.add_parser("run", help="rebuild the list, boxes and viewer files from the library")
 
     view = sub.add_parser("view", help="open the globe viewer in your browser")
     view.add_argument("--port", type=int, default=8000)
@@ -86,20 +90,37 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = load_config(args.config)
-        db_path = data_dir(config) / "atlas.duckdb"
-        csv_path = data_dir(config) / "bronze" / "file_inventory.csv"
-        counts = build_inventory(maps_folder(config), db_path)
-    except (ConfigError, NotADirectoryError) as exc:
+    except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+    maps_library = library_dir(config)
+
+    if args.command == "add":
+        result = library.add_maps(args.paths, maps_library)
+        print(f"Added to the library:   {len(result['added'])}")
+        print(f"Already in the library: {result['already_in_library']}")
+        if result["not_maps"]:
+            print(f"Skipped (not map files): {result['not_maps']}")
+        for path in result["missing"]:
+            print(f"Not found: {path}")
+        if result["added"]:
+            print("\nNext: run `atlas run` to update the atlas.")
+        return 2 if result["missing"] else 0
+
+    maps_library.mkdir(parents=True, exist_ok=True)
+    db_path = data_dir(config) / "atlas.duckdb"
+    csv_path = data_dir(config) / "bronze" / "file_inventory.csv"
+    counts = build_inventory(maps_library, db_path, library.original_names(maps_library))
     export_csv(db_path, csv_path)
     names = [row["file_name"] for row in read_inventory(db_path)]
     added = ensure_manifest(manifest_csv(config), names)
 
-    print(f"Maps in the list: {counts['total']}")
+    print(f"Maps in the library: {counts['total']}")
     print(f"  new: {counts['new']}, changed: {counts['changed']}, unchanged: {counts['unchanged']}")
-    if counts["no_longer_in_folder"]:
-        print(f"  listed but no longer in the folder: {counts['no_longer_in_folder']}")
+    if counts["removed"]:
+        print(f"  no longer in the library, so dropped from the list: {counts['removed']}")
+    if not counts["total"]:
+        print("  The library is empty. Add maps with: atlas add <file or folder>")
     print(f"List to look at:     {csv_path}")
     print(f"File for your notes: {manifest_csv(config)} ({added} blank rows added)")
 

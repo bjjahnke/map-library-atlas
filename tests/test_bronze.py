@@ -23,7 +23,7 @@ def test_inventory_lists_only_map_files(maps_folder, tmp_path):
     counts = build_inventory(maps_folder, db)
     rows = {r["file_name"]: r for r in read_inventory(db)}
 
-    assert counts == {"new": 3, "changed": 0, "unchanged": 0, "total": 3, "no_longer_in_folder": 0}
+    assert counts == {"new": 3, "changed": 0, "unchanged": 0, "total": 3, "removed": 0}
     assert set(rows) == {"a.pdf", "b.JPG", "a_copy.pdf"}
     assert rows["b.JPG"]["extension"] == "jpg"
     assert rows["a.pdf"]["size_bytes"] == 5
@@ -52,9 +52,16 @@ def test_rerun_skips_unchanged_and_picks_up_changes(maps_folder, tmp_path):
     counts = build_inventory(maps_folder, db)
     rows = {r["file_name"]: r for r in read_inventory(db)}
 
-    assert counts == {"new": 1, "changed": 1, "unchanged": 1, "total": 4, "no_longer_in_folder": 1}
+    assert counts == {"new": 1, "changed": 1, "unchanged": 1, "total": 3, "removed": 1}
     assert rows["b.JPG"]["file_id"] != first["b.JPG"]["file_id"]
-    assert rows["a.pdf"] == first["a.pdf"]  # removed files stay listed
+    assert "a.pdf" not in rows  # the list mirrors the folder
+
+
+def test_original_names_are_recorded(maps_folder, tmp_path):
+    db = tmp_path / "atlas.duckdb"
+    build_inventory(maps_folder, db, {"a.pdf": "Original Name.pdf"})
+    names = {r["file_name"] for r in read_inventory(db)}
+    assert names == {"Original Name.pdf", "b.JPG", "a_copy.pdf"}
 
 
 def test_source_files_are_untouched(maps_folder, tmp_path):
@@ -111,11 +118,11 @@ def test_manifest_gains_new_columns_without_losing_edits(tmp_path):
 def test_cli_run(maps_folder, tmp_path, capsys):
     config = tmp_path / "config.yaml"
     config.write_text(
-        f"maps_folder: {maps_folder}\ndata_dir: {tmp_path / 'data'}\n"
+        f"library_dir: {maps_folder}\ndata_dir: {tmp_path / 'data'}\n"
         f"manifest_csv: {tmp_path / 'config' / 'map_manifest.csv'}\n"
     )
     assert main(["--config", str(config), "run"]) == 0
-    assert "Maps in the list: 3" in capsys.readouterr().out
+    assert "Maps in the library: 3" in capsys.readouterr().out
     assert (tmp_path / "data" / "bronze" / "file_inventory.csv").is_file()
     assert (tmp_path / "config" / "map_manifest.csv").is_file()
 

@@ -1,5 +1,6 @@
 # Pipeline outputs and personal config (PROJECT_SCOPE.md Sections 5.5 and 7)
 data/
+library/
 config.yaml
 config/map_manifest.csv
 

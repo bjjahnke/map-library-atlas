@@ -54,10 +54,15 @@ def _utc_naive(timestamp: float) -> datetime:
     return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
 
 
-def build_inventory(folder: Path, db_path: Path) -> dict:
-    """Record every map file under folder. Files whose size and date are unchanged are skipped."""
+def build_inventory(folder: Path, db_path: Path, original_names: dict[str, str] | None = None) -> dict:
+    """Make the inventory mirror the map files under folder.
+
+    Files whose size and date are unchanged are skipped; rows for files that are gone are
+    removed. `original_names` maps a file's name in the folder to the name to record for it.
+    """
     if not folder.is_dir():
-        raise NotADirectoryError(f"maps_folder does not exist or is not a folder: {folder}")
+        raise NotADirectoryError(f"folder does not exist or is not a folder: {folder}")
+    original_names = original_names or {}
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
     counts = {"new": 0, "changed": 0, "unchanged": 0}
@@ -100,7 +105,7 @@ def build_inventory(folder: Path, db_path: Path) -> dict:
                 [
                     hash_file(path),
                     file_path,
-                    path.name,
+                    original_names.get(path.name, path.name),
                     path.suffix.lower().lstrip("."),
                     stat.st_size,
                     modified_at,
@@ -108,10 +113,12 @@ def build_inventory(folder: Path, db_path: Path) -> dict:
                     json.dumps(read_raw_metadata(path)),
                 ],
             )
+        gone = sorted(set(existing) - seen)
+        for path in gone:
+            con.execute("DELETE FROM bronze.file_inventory WHERE file_path = ?", [path])
         total = con.execute("SELECT count(*) FROM bronze.file_inventory").fetchone()[0]
 
-    # Rows are kept for files that have since been removed from the folder; just report them.
-    return counts | {"total": total, "no_longer_in_folder": len(set(existing) - seen)}
+    return counts | {"total": total, "removed": len(gone)}
 
 
 def read_inventory(db_path: Path) -> list[dict]:

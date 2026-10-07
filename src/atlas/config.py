@@ -41,3 +41,7 @@ def manifest_csv(config: dict) -> Path:
 
 def regions_csv(config: dict) -> Path:
     return Path(config.get("regions_csv", "config/regions.csv")).expanduser()
+
+
+def library_dir(config: dict) -> Path:
+    return Path(config.get("library_dir", "library")).expanduser()

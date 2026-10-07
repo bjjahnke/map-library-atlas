@@ -17,10 +17,11 @@ maps cover. This project builds an index: it lists every map, attaches a rectang
 ("bounding box") saying what part of the world each one covers, and draws those rectangles
 on a globe. Click a spot on the globe and you get a list of every map covering that spot.
 
-It runs entirely on your own computer. Your map files are only ever **read**. They are
-never changed, moved, renamed or copied.
+It runs entirely on your own computer. Your original map files are only ever **read**:
+never changed, moved or renamed. The atlas keeps its own copy of each map in one folder
+called the library.
 
-Right now it is pointed at one small test folder (26 Wisconsin maps), not your whole library.
+Right now the library holds one small test set (26 Wisconsin maps), not your whole collection.
 
 ---
 
@@ -28,8 +29,14 @@ Right now it is pointed at one small test folder (26 Wisconsin maps), not your w
 
 ```mermaid
 flowchart TD
-    subgraph SRC["YOUR MAPS FOLDER"]
-        maps["PDFs and pictures<br/>Only ever read, never changed"]
+    subgraph SRC["YOUR MAPS, WHEREVER THEY ARE"]
+        maps["PDFs and pictures, in any folders<br/>Only ever read, never changed"]
+    end
+
+    subgraph LIB["THE LIBRARY · command: atlas add"]
+        add["Copy each new map in<br/>Skip maps already there"]
+        library[/"library/<br/>one flat folder, the atlas's own copies"/]
+        add --> library
     end
 
     subgraph S1["STEP 1 · COUNT (optional)<br/>command: atlas census"]
@@ -81,7 +88,8 @@ flowchart TD
     end
 
     maps --> census
-    maps --> bronze
+    maps --> add
+    library --> bronze
     bronzeFile --> decide
     manifest --> decide
     regions --> decide
@@ -93,6 +101,7 @@ flowchart TD
     classDef silverC fill:#e5e7eb,stroke:#6b7280,color:#0f172a
     classDef goldC fill:#fdecb2,stroke:#b8860b,color:#0f172a
     class manifest,regions yours
+    class add,library bronzeC
     class bronze,bronzeFile bronzeC
     class decide,own,region,none,bad,silverFile silverC
     class split,goldMap,goldTodo goldC
@@ -107,7 +116,10 @@ It draws automatically on GitHub and in the VS Code preview, or you can paste th
 into https://mermaid.live. The same flow in plain text:
 
 ```
- Your maps folder  ->  1. Count (optional report)
+ Your maps, in any folders  ->  1. Count (optional report)
+        |
+        v
+ LIBRARY     the atlas's own copy of every map, in one flat folder (atlas add)
         |
         v
  2. BRONZE   the raw list of map files
@@ -122,7 +134,8 @@ into https://mermaid.live. The same flow in plain text:
  5. VIEWER   the globe in your browser
 ```
 
-Steps 2, 3 and 4 all happen together when you run one command: `atlas run`.
+Getting maps into the library is one command, `atlas add`. Steps 2, 3 and 4 then all
+happen together when you run `atlas run`.
 
 "Bronze, silver, gold" is just a naming habit for data that gets more refined at each
 stage: bronze is raw, silver is cleaned up, gold is ready to use.
@@ -134,6 +147,7 @@ stage: bronze is raw, silver is cleaned up, gold is ready to use.
 | Folder | Whose is it? | What that means |
 |---|---|---|
 | `config/` | **Yours** | The only place you type things in. |
+| `library/` | **The tool's** | The atlas's copies of your maps. Filled by `atlas add`. Don't rename files in it. |
 | `data/` | **The tool's** | Rebuilt from scratch on every run. Anything you type here is wiped. |
 
 If you want to change something about a map (its region, its box, its title, whether it's
@@ -141,18 +155,19 @@ parked), you change it in `config/map_manifest.csv` and run `atlas run` again.
 
 ---
 
-## 4. The three commands
+## 4. The four commands
 
 Run these in a terminal, from the project folder.
 
 | Command | What it does | Does it change anything? |
 |---|---|---|
-| `.venv/bin/atlas census -v` | Counts the maps in your folder by type and prints the list. | No. It only prints. |
-| `.venv/bin/atlas run` | Rebuilds bronze, silver and gold from your folder and your notes. | Rewrites everything in `data/`. Adds blank rows to your notes file for new maps. |
+| `.venv/bin/atlas census -v` | Counts the maps in a folder by type and prints the list. | No. It only prints. |
+| `.venv/bin/atlas add <file or folder>` | Copies maps into the library. | Adds files to `library/`. Your originals are untouched. |
+| `.venv/bin/atlas run` | Rebuilds bronze, silver and gold from the library and your notes. | Rewrites everything in `data/`. Adds blank rows to your notes file for new maps. |
 | `.venv/bin/atlas view` | Opens the globe in your browser. | No. Press Ctrl+C in the terminal to stop it. |
 
-Typical session: edit your notes file, `atlas run`, `atlas view` (or refresh the browser
-page if the viewer is already open).
+Typical session: `atlas add` any new maps, `atlas run`, fill in your notes file for the
+new ones, `atlas run` again, then `atlas view` (or refresh the browser page).
 
 ---
 
@@ -160,8 +175,8 @@ page if the viewer is already open).
 
 ### Step 1: Count (the "census")
 
-**What it does.** Walks through your maps folder, including sub-folders, and counts the
-files that look like maps: `.pdf`, `.jpg`/`.jpeg`, `.png`, `.tif`/`.tiff`. Hidden files and
+**What it does.** Walks through a folder you point it at, including sub-folders, and counts
+the files that look like maps: `.pdf`, `.jpg`/`.jpeg`, `.png`, `.tif`/`.tiff`. Hidden files and
 other file types are ignored (other types are mentioned at the bottom of the report).
 
 **What it tells you.** How many maps of each type, how many PDFs have more than one page,
@@ -171,13 +186,42 @@ software carry their own coordinates; the report calls these `geopdf`.
 **What it found in the test folder.** 26 maps: 22 PDFs (16 of them with location stored
 inside), 3 JPGs and 1 PNG. None were unreadable.
 
-**Where the result goes.** Nowhere. It is printed on screen and not saved.
+**Where the result goes.** Nowhere. It is printed on screen and not saved. It is a way to
+size up a folder before adding it; you never have to run it.
+
+### The library (staging your maps)
+
+**What it is.** One flat folder, `library/`, holding the atlas's own copy of every map.
+Think of it as the staging area: maps can live anywhere on your computer, in any folder
+structure, and nothing reaches the atlas until you add it here.
+
+**What `atlas add` does.** You give it a file, several files, or a whole folder (it looks
+inside sub-folders too). For each map it finds, it works out the fingerprint and:
+
+- if a map with that fingerprint is already in the library, skips it;
+- otherwise copies it in.
+
+Your originals are only read. You can add the same folder again and again; only maps the
+library doesn't have yet are copied.
+
+**How copies are named.** The original name, two underscores, then the first ten
+characters of the fingerprint: `Wisconsin_map.jpg` becomes `Wisconsin_map__1a2b3c4d5e.jpg`.
+That keeps names readable while making sure two different maps both called `map.pdf`
+cannot overwrite each other.
+
+**`library/index.csv`.** A record kept by the tool, one row per map: its fingerprint, its
+name in the library, its original name, the folder it was copied from, and when.
+
+**Removing a map.** Delete its file from `library/` and run `atlas run`. It drops off the
+list and the globe.
 
 ### Step 2: Bronze (the list)
 
-**What it does.** Writes down one row per map file, exactly as found, with no judgement.
+**What it does.** Writes down one row per map in the library, exactly as found, with no
+judgement. The list always mirrors the library: a map removed from the library is removed
+from the list.
 
-**How.** For each map file it records the name, where it lives, its size and the date it
+**How.** For each map file it records its original name, where its library copy lives, its size and the date it
 was last changed. It also works out a **fingerprint**: a long code calculated from the
 file's contents. Two files with the same fingerprint are exact copies of each other, and
 if a file's contents change, its fingerprint changes.
@@ -194,8 +238,8 @@ is not fingerprinted again. That is why a second run reports `unchanged: 26`.
 | Column | Meaning |
 |---|---|
 | `file_id` | The fingerprint. |
-| `file_path` | Full location of the file on your computer. |
-| `file_name` | Just the file's name. |
+| `file_path` | Full location of the atlas's copy, inside `library/`. |
+| `file_name` | The name the map had before it was added. |
 | `extension` | File type: `pdf`, `jpg`, `png`. |
 | `size_bytes` | Size in bytes (1,000,000 is about 1 MB). |
 | `modified_at` | When the file was last changed (your local time). |
@@ -325,6 +369,10 @@ map-library-atlas/
 │   ├── map_manifest.example.csv A made-up example of the notes file (safe to share)
 │   └── regions.csv              Reusable region boxes
 │
+├── library/                     ── THE ATLAS'S COPIES OF YOUR MAPS (private) ──
+│   ├── <name>__<fingerprint>.pdf  One file per map, all in this one folder
+│   └── index.csv                Where each map came from and when it was added
+│
 ├── data/                        ── MADE BY THE TOOL, rebuilt every run (private) ──
 │   ├── atlas.duckdb             A small database holding all three layers
 │   ├── bronze/
@@ -337,9 +385,10 @@ map-library-atlas/
 │       └── needs_review.csv     Your to-do list
 │
 ├── src/atlas/                   ── THE PROGRAM ──
-│   ├── cli.py                   The three commands: census, run, view
+│   ├── cli.py                   The four commands: census, add, run, view
 │   ├── config.py                Reads config.yaml
 │   ├── census.py                Step 1: counting
+│   ├── library.py               The library: copies maps in, keeps index.csv
 │   ├── bronze.py                Step 2: the list and fingerprints
 │   ├── metadata.py              Reads the technical details stored inside a file
 │   ├── manifest.py              Reads your notes and regions; adds blank rows
@@ -363,9 +412,10 @@ map-library-atlas/
 read. The same information is also kept in this one database file, as four tables:
 `bronze.file_inventory`, `silver.maps`, `gold.map_library` and `gold.needs_review`.
 
-**About `config.yaml`.** It has four lines that matter: `maps_folder` (which folder to
-scan), `data_dir` (where outputs go), the locations of your two hand-edited files, and
-`use_embedded_location` (see section 7).
+**About `config.yaml`.** The lines that matter: `library_dir` (where the library is),
+`data_dir` (where outputs go), the locations of your two hand-edited files,
+`use_embedded_location` (see section 7), and `maps_folder`, which is now only used as the
+default folder for `atlas census`.
 
 ---
 
@@ -391,7 +441,12 @@ These are choices that differ from, or add to, the first version of the plan.
 4. **Titles come from your notes or the file name.** Some PDFs have a title stored inside
    them. Those are not used, because some are junk left by the software that made the file.
 
-5. **A different reading tool.** The plan named a tool called GDAL for reading details
+5. **A library folder was added.** The first version scanned your maps wherever they
+   were. Now maps are copied into one flat `library/` folder first, so the atlas no
+   longer depends on how your own folders are organised, and the list always matches
+   what is in the library.
+
+6. **A different reading tool.** The plan named a tool called GDAL for reading details
    from inside files. It is not installed on this computer, so the same details are read
    with two other libraries (`pypdf` for PDFs, `rasterio` for images).
 
@@ -401,22 +456,21 @@ These are choices that differ from, or add to, the first version of the plan.
 
 Things that are not handled yet, so they don't surprise you later.
 
-- **Removed files stay listed.** If you delete or move a map out of the folder, its row
-  stays in bronze and it keeps flowing through to the globe. `atlas run` prints how many
-  such rows there are.
-- **Same file name in two folders.** Your notes file matches rows by file name only, so
-  two different maps with the identical name would share one row of notes.
+- **Two different maps with the same name share one row of notes.** The library keeps
+  them apart, but your notes file still matches rows by file name only. This goes away
+  when labelling moves out of the notes file.
+- **The library doubles disk use.** Each map exists twice: your original and the copy.
 - **Exact copies are not marked.** Two identical files get the same fingerprint, but the
   `duplicate_of` column is not filled in. The test folder has no duplicates.
 - **Multi-page PDFs count as one map.** Three PDFs in the test folder have two pages.
-- **Only tested on 26 maps.** It has not been run on the full library.
+- **Only tested on 26 maps.** It has not been run on the full collection.
 
 ---
 
 ## 9. What stays private
 
 If this project is ever put on GitHub, these never go with it (they are listed in
-`.gitignore`): everything in `data/`, `config.yaml`, `config/map_manifest.csv`, and any
+`.gitignore`): everything in `library/` and `data/`, `config.yaml`, `config/map_manifest.csv`, and any
 map file (`.pdf`, `.jpg`, `.png`, `.tif`). Those are the files that contain your folder
 locations and your maps.
 
@@ -432,7 +486,7 @@ python3 -m venv .venv
 cp config.example.yaml config.yaml
 ```
 
-Then open `config.yaml` and set `maps_folder` to your maps folder.
+Then add your maps with `.venv/bin/atlas add <folder>` and run `.venv/bin/atlas run`.
 
 To run the automatic checks:
 

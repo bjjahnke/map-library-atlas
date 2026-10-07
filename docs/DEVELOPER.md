@@ -22,7 +22,7 @@ Last updated: 7 October 2026.
 | Config | PyYAML | `config.yaml` |
 | Viewer | MapLibre GL JS 5.6.0 from the unpkg CDN | Globe, boxes, pop-up |
 | Base map | OpenStreetMap raster tiles | Background imagery, no API key |
-| Tests | pytest | 34 tests in `tests/` |
+| Tests | pytest | 41 tests in `tests/` |
 
 Not installed, although named in the plan: standalone GDAL (`osgeo`), pyproj, shapely.
 rasterio covers reprojection, and a bounding-box polygon is built by hand in `gold.py`.
@@ -36,9 +36,10 @@ georeferencing is parsed with pypdf.
 
 ```mermaid
 flowchart LR
-    cli["cli.py<br/>census / run / view"]
+    cli["cli.py<br/>census / add / run / view"]
     config["config.py"]
     census["census.py"]
+    library["library.py"]
     bronze["bronze.py"]
     metadata["metadata.py"]
     manifest["manifest.py"]
@@ -49,7 +50,10 @@ flowchart LR
 
     cli --> config
     cli --> census
+    cli --> library
     cli --> bronze
+    library --> bronze
+    library --> census
     cli --> manifest
     cli --> silver
     cli --> gold
@@ -62,8 +66,8 @@ flowchart LR
     gold -->|"map_library.geojson"| viewer
 ```
 
-Arrows mean "uses". `bronze.py` reuses `census.py` only for the folder walk and the list
-of accepted extensions.
+Arrows mean "uses". `bronze.py` and `library.py` reuse `census.py` only for the folder
+walk and the list of accepted extensions; `library.py` reuses `bronze.hash_file`.
 
 | Module | Responsibility |
 |---|---|
@@ -71,7 +75,8 @@ of accepted extensions.
 | `config.py` | Loads `config.yaml`; one helper per setting, each with a default. |
 | `census.py` | Read-only folder report. Standalone; writes nothing. |
 | `metadata.py` | Reads raw metadata from inside one file. Never raises. |
-| `bronze.py` | Folder scan, hashing, `bronze.file_inventory`, CSV export. |
+| `library.py` | `atlas add`: copies maps into the library and maintains `library/index.csv`. |
+| `bronze.py` | Library scan, hashing, `bronze.file_inventory`, CSV export. |
 | `manifest.py` | Reads and maintains the two hand-edited CSVs. |
 | `silver.py` | Bbox resolution, validation, `silver.maps`, CSV export. |
 | `gold.py` | `gold.map_library`, `gold.needs_review`, GeoJSON and CSV export. |
@@ -83,13 +88,16 @@ of accepted extensions.
 Defined in `cli.main`.
 
 1. `load_config` reads `config.yaml`.
-2. `bronze.build_inventory(maps_folder, data/atlas.duckdb)` scans and upserts.
+2. `bronze.build_inventory(library_dir, data/atlas.duckdb, original_names)` scans the
+   library, upserts, and deletes rows for files no longer there.
 3. `bronze.export_csv` writes `data/bronze/file_inventory.csv`.
 4. `manifest.ensure_manifest` adds missing columns, then blank rows for unseen file names.
 5. The manifest and regions files are copied as-is to `data/bronze/manual_inputs/`.
 6. `silver.build_silver` rebuilds `silver.maps` from bronze plus the manual inputs.
 7. `silver.export_csv` writes `data/silver/maps.csv`.
 8. `gold.build_gold` rebuilds both gold tables and writes the two gold files.
+
+`atlas add` is a separate command and is the only thing that writes to `library/`.
 
 Bronze is incremental. Silver and gold are dropped and rebuilt in full on every run
 (`CREATE OR REPLACE TABLE`), so they are always a pure function of bronze plus the
@@ -102,7 +110,8 @@ manual inputs.
 | Command | Flags | Notes |
 |---|---|---|
 | `atlas census` | `--folder PATH`, `-v/--verbose`, `--json` | `--folder` overrides `maps_folder` and needs no config file. |
-| `atlas run` | none | Needs `config.yaml`. |
+| `atlas add PATH...` | none | Files or folders (recursive). Exit code 2 if any path does not exist. |
+| `atlas run` | none | Needs `config.yaml`. Creates `library_dir` if absent. |
 | `atlas view` | `--port N` (default 8000), `--no-browser` | Serves the current directory on `127.0.0.1` only. Must be run from the project root. |
 | all | `--config PATH` (before the subcommand) | Default `config.yaml` in the current directory. |
 
@@ -112,7 +121,8 @@ Exit code 2 on a missing config, a missing maps folder, or a port that is in use
 
 | Key | Default | Meaning |
 |---|---|---|
-| `maps_folder` | required | Folder scanned recursively. |
+| `library_dir` | `library` | The flat folder of copies that the pipeline reads. |
+| `maps_folder` | none | Only the default folder for `atlas census`. Optional. |
 | `data_dir` | `data` | Where the database and exports go. |
 | `regions_csv` | `config/regions.csv` | Region definitions. |
 | `manifest_csv` | `config/map_manifest.csv` | Per-map manual input. |
@@ -140,6 +150,32 @@ agree today; a change to PDF detection needs making in both.
 
 ---
 
+## 5b. Library (`library.py`)
+
+`add_maps(sources, library_dir)`:
+
+1. Reads `library/index.csv` and drops index rows whose copy is no longer on disk.
+2. Collects candidate files: each source is a file or a directory walked with
+   `iter_files`. Non-map extensions are counted and skipped; anything already inside the
+   library is ignored; paths that do not exist are reported.
+3. Hashes each candidate. If the SHA-256 is already present, it is skipped. Otherwise it
+   is copied with `shutil.copy2` (which keeps the file's own modified date) to
+   `<stem, max 150 chars>__<first 10 hex of the hash><lower-case suffix>`.
+4. Rewrites `index.csv`.
+
+`index.csv` columns: `file_id, library_name, original_name, original_path, added_at`.
+`original_path` is kept so the source folder names can later be used to suggest labels.
+
+De-duplication is by content, so the same map under two names is stored once (first name
+wins). The index is a convenience, not the source of truth for what exists: a file dropped
+straight into `library/` is still picked up by bronze, under its own name. If the index is
+lost, files keep their library names as `file_name`.
+
+Renaming a file inside the library makes bronze treat it as a new path, and breaks its
+link to the index.
+
+---
+
 ## 6. Bronze (`bronze.py`, `metadata.py`)
 
 ### Table `bronze.file_inventory`
@@ -147,8 +183,8 @@ agree today; a change to PDF detection needs making in both.
 | Column | Type | Notes |
 |---|---|---|
 | `file_id` | VARCHAR | SHA-256 of the file's bytes, hex. Not unique: exact copies share it. |
-| `file_path` | VARCHAR, **primary key** | Absolute, resolved path. |
-| `file_name` | VARCHAR | |
+| `file_path` | VARCHAR, **primary key** | Absolute, resolved path of the library copy. |
+| `file_name` | VARCHAR | Original name from `library/index.csv`; the library name if not indexed. |
 | `extension` | VARCHAR | Lower-case, no dot. |
 | `size_bytes` | BIGINT | |
 | `modified_at` | TIMESTAMP | UTC, from the file's mtime. |
@@ -161,8 +197,8 @@ For each file: if a row exists for the same path with the same `size_bytes` and
 `modified_at`, the file is **not** re-hashed and counts as `unchanged`. Otherwise it is
 hashed in 1 MB chunks and written with `INSERT OR REPLACE`, counting as `new` or `changed`.
 
-- Rows are never deleted. Files no longer in the folder are only counted
-  (`no_longer_in_folder`).
+- The table mirrors the library: rows whose file is gone are deleted and counted
+  (`removed`).
 - A row whose `raw_metadata` is NULL (written by an early version) has it filled in on
   the next run without re-hashing.
 - Skipping relies on size and mtime, so an edit that preserves both would be missed.
@@ -211,7 +247,7 @@ time and trimmed to the minute for readability, so the CSV is not a byte-exact d
 
 Columns: `file_name, revisit, region_key, min_lon, min_lat, max_lon, max_lat, title, notes`.
 
-- **Join key is `file_name`.** Not the path, not the hash.
+- **Join key is `file_name`** (the original name). Not the path, not the hash.
 - `ensure_manifest` appends a blank row for every inventory file name not present. New
   rows are sorted among themselves and added at the end.
 - `_add_missing_columns` rewrites the file once if a column from `COLUMNS` is absent,
@@ -360,6 +396,8 @@ would not work. Silver flags such boxes as errors, so none reach the viewer.
 | Title from PDF metadata, else file name | Manifest title, else file name | Embedded PDF titles were unreliable. They are still stored in `raw_metadata`. |
 | `format` values exclude `tiff` | A TIFF without georeferencing is `tiff` | Nothing else fits. Untested on real data. |
 | pyproj, shapely | Not used | rasterio covers reprojection; polygons are trivial. |
+| Scan `maps_folder` in place | Maps are copied into a flat `library/`; bronze scans that | Decouples the atlas from the owner's folder structure. |
+| Bronze: "nothing lost", rows kept | Bronze mirrors the library; rows for missing files are deleted | Otherwise removed maps stayed on the globe. |
 
 `PROJECT_SCOPE.md` and `CLAUDE.md` have been updated to describe the code as built; this table is the record of what changed from the first version of the plan.
 
@@ -367,11 +405,9 @@ would not work. Silver flags such boxes as errors, so none reach the viewer.
 
 ## 12. Known limitations
 
-- **Removed files persist.** Bronze never deletes rows, so a file removed from the
-  folder still reaches gold and the viewer if its manifest row gives it a box.
-  Deleting `data/atlas.duckdb` forces a clean rebuild.
-- **Manifest joins on file name.** Two different files with the same name in different
-  folders share one manifest row.
+- **Manifest joins on file name.** Two different maps with the same original name are
+  kept apart in the library and in bronze, but share one manifest row.
+- **Disk use doubles.** The library is a full copy.
 - **Duplicates.** Exact copies share a `file_id`, hence a `map_id`. `duplicate_of` is
   never set, the silver CSV export shows one file name per `map_id`, and gold emits one
   row per distinct path. Untested on real data; the test folder has no duplicates.
@@ -395,7 +431,8 @@ All fixtures are generated in temporary folders; no real maps are needed or touc
 | File | Tests | Covers |
 |---|---|---|
 | `test_census.py` | 10 | Classification of each format, summary counts, error handling, read-only guarantee, CLI. |
-| `test_bronze.py` | 9 | Inventory, duplicate hashes, incremental re-runs, CSV export, manifest row and column maintenance, reading spreadsheet-saved CSVs, CLI. |
+| `test_library.py` | 6 | Flat copy, same-name maps kept apart, same-content maps stored once, re-adding, index contents, originals untouched, CLI. |
+| `test_bronze.py` | 10 | Inventory, duplicate hashes, incremental re-runs and removals, original names, CSV export, manifest row and column maintenance, reading spreadsheet-saved CSVs, CLI. |
 | `test_silver.py` | 14 | Manual box, region default, precedence, the embedded switch, densification, inset viewports, manifest mistakes, revisit mark, validation. |
 | `test_gold.py` | 1 | GeoJSON contents, to-do list, re-runnability. |
 
@@ -416,7 +453,7 @@ python3 -m venv .venv
 `--only-binary rasterio` matters: without it pip may pick a rasterio release that has no
 prebuilt package for this macOS version and try to compile it, which fails without GDAL.
 
-Never commit (all in `.gitignore`): `data/`, `config.yaml`, `config/map_manifest.csv`,
+Never commit (all in `.gitignore`): `library/`, `data/`, `config.yaml`, `config/map_manifest.csv`,
 and map files (`*.pdf`, `*.tif`, `*.tiff`, `*.jpg`, `*.jpeg`, `*.png`, world files).
 
 ### Inspecting the database directly
