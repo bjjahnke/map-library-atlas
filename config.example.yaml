@@ -1,0 +1,15 @@
+# Copy to config.yaml (gitignored) and edit.
+
+# Folder scanned recursively for maps. Start with the small test subset (Phase 0).
+maps_folder: /path/to/your/test-maps
+
+# Pipeline outputs (bronze/silver/gold live under here).
+data_dir: data
+
+# Manual inputs (PROJECT_SCOPE.md Section 5.5).
+regions_csv: config/regions.csv
+manifest_csv: config/map_manifest.csv
+
+# false: every box comes from the manifest (your own box, or a region default).
+# true: maps with location stored inside the file use that when you gave no box of your own.
+use_embedded_location: false

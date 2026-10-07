@@ -1,0 +1,26 @@
+# Pipeline outputs and personal config (PROJECT_SCOPE.md Sections 5.5 and 7)
+data/
+config.yaml
+config/map_manifest.csv
+
+# Map files never belong in git. Whitelist specific assets with `!path` if needed.
+*.pdf
+*.tif
+*.tiff
+*.jpg
+*.jpeg
+*.png
+*.tfw
+*.jgw
+*.pgw
+*.wld
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+*.bkp
