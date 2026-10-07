@@ -60,7 +60,9 @@ nothing filled in. For each one, do **one** of these:
 
 | If... | Then type... | In column(s)... |
 |---|---|---|
-| The map covers a whole region you've already defined | the region's key, e.g. `wisconsin` | `region_key` |
+| The map covers a whole state | the state's key, e.g. `wisconsin` or `new_york` | `region_key` |
+| The map covers several states | the keys separated by semicolons, e.g. `new_york; connecticut; new_jersey` | `region_key` |
+| The map covers the whole country | `contiguous_united_states` (lower 48) or `united_states` (all 50) | `region_key` |
 | You know the map's exact edges | west, south, east, north in degrees | `min_lon`, `min_lat`, `max_lon`, `max_lat` |
 | You're not sure yet | `yes` (and a reminder in `notes` if you like) | `revisit` |
 
@@ -121,27 +123,26 @@ or use a website that lets you draw a rectangle on a map and shows its corners
 
 ---
 
-## Adding a new region
+## Places you can use
 
-A region is a reusable box with a short name, so you don't have to retype the same four
-numbers for every statewide (or countywide) map.
+Every US state, DC and five territories are already defined in **`config/regions.csv`**,
+along with `contiguous_united_states` and `united_states`. The key is the name in lower
+case with underscores for spaces: `iowa`, `north_dakota`, `district_of_columbia`.
 
-Open **`config/regions.csv`** and add a row:
+A map labelled with several places gets one box drawn around all of them. Maps placed
+this way are treated as "approximate", because the box is the place's, not the map's own.
+
+### Adding a place of your own
+
+For anything not on the list (a county, a city, another country), add a row to
+`config/regions.csv`:
 
 ```
-region_key,region_name,min_lon,min_lat,max_lon,max_lat
-wisconsin,Wisconsin,-92.888114,42.491983,-86.805415,47.080621
 buffalo_county_wi,Buffalo County WI,-92.08,44.02,-91.52,44.60
 ```
 
-(The Buffalo County numbers above are only an illustration; look up the real ones.)
-
-Keep `region_key` short, lower-case, with no spaces. Then type that key in the
-`region_key` column of your notes file for any map that covers the region, and run
-`.venv/bin/atlas run`.
-
-Maps placed by region are treated as "approximate", because the box is the region's,
-not the map's own.
+(Those numbers are only an illustration; look up the real ones.) Keep the key short,
+lower-case, with no spaces. Then use it in `region_key` like any other.
 
 ---
 
@@ -176,7 +177,7 @@ affected.
 | A map isn't on the globe | It has no box, or its row has a mistake. | Open `data/gold/needs_review.csv` and read its `status_detail`. |
 | "the box in the manifest is incomplete" | Only some of the four box numbers are filled in. | Fill in all four, or clear all four. |
 | "has a value that is not a number" | A letter or stray character in a box column. | Retype the number. |
-| "region '...' is not in regions.csv" | The region key is misspelled or not defined. | Fix the spelling, or add the region. |
+| "region '...' is not in regions.csv" | The key is misspelled or not defined. Spaces must be underscores (`new_york`). | Fix the spelling, or add the place. |
 | "bounding box has no area" | West/east or south/north are swapped. | Swap them back. Remember US longitudes are negative. |
 | "latitude outside..." or "longitude outside..." | Latitude and longitude are in each other's columns. | `lon` columns hold the east-west numbers, `lat` the north-south ones. |
 | `atlas run` says the library is empty | No maps have been added yet. | `.venv/bin/atlas add <file or folder>` |

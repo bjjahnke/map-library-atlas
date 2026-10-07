@@ -182,7 +182,8 @@ def resolve_map(
     manual = manual or {}
     regions = regions or {}
     base_format = {"jpeg": "jpg", "tif": "tiff"}.get(extension, extension)
-    region_key = manual.get("region_key", "").lower() or None
+    # one or more regions, separated by semicolons
+    region_keys = [key.strip().lower() for key in manual.get("region_key", "").split(";") if key.strip()]
     # "come back to this one": stays visible in status_detail whether or not it has a box yet
     revisit = "marked to come back to" if is_flagged(manual) else None
     if revisit and manual.get("notes"):
@@ -196,7 +197,7 @@ def resolve_map(
         "height_px": meta.get("height"),
         "is_georeferenced": False,
         "georef_method": "none",
-        "region_key": region_key,
+        "region_key": "; ".join(region_keys) or None,
         "bbox_source": "none",
         "status": "needs_georef",
         "status_detail": revisit or "no box or region entered in the manifest",
@@ -224,12 +225,21 @@ def resolve_map(
             raise ValueError(embedded_error)
         elif use_embedded and embedded:
             bbox, source, precision, note = embedded[0], "embedded", "exact", embedded[2]
-        elif region_key:
-            if region_key not in regions:
-                raise ValueError(f"region '{region_key}' is not in regions.csv")
-            bbox = _box_from_fields(regions[region_key], f"region '{region_key}' in regions.csv")
-            if bbox is None:
-                raise ValueError(f"region '{region_key}' has no box in regions.csv")
+        elif region_keys:
+            unknown = [key for key in region_keys if key not in regions]
+            if unknown:
+                raise ValueError(f"region {', '.join(repr(k) for k in unknown)} is not in regions.csv")
+            boxes = [_box_from_fields(regions[key], f"region '{key}' in regions.csv") for key in region_keys]
+            if None in boxes:
+                missing = region_keys[boxes.index(None)]
+                raise ValueError(f"region '{missing}' has no box in regions.csv")
+            # one box drawn around every region the map is labelled with
+            bbox = (
+                min(box[0] for box in boxes),
+                min(box[1] for box in boxes),
+                max(box[2] for box in boxes),
+                max(box[3] for box in boxes),
+            )
             source, precision, note = "region_default", "approximate", None
         else:
             return row

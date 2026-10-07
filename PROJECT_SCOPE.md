@@ -139,7 +139,7 @@ Manual data is **reference/seed data that you maintain by hand**. It is not a me
 
 Two small, human-edited files (CSV or YAML), tracked in `config/`:
 
-**`regions.csv`**: reusable default boxes
+**`regions.csv`**: reusable default boxes. Ships with all US states, DC, five territories, and two whole-country entries (58 rows)
 
 | region_key | region_name | min_lon | min_lat | max_lon | max_lat |
 |---|---|---|---|---|---|
@@ -151,7 +151,7 @@ Two small, human-edited files (CSV or YAML), tracked in `config/`:
 |---|---|
 | `file_name` | Which map this row describes. Matching is by file name only |
 | `revisit` | `yes` to mark the map as one to come back to |
-| `region_key` | Optional bucket, e.g. `wisconsin` |
+| `region_key` | Optional place, e.g. `wisconsin`. Several may be given, separated by `;`, and the box is drawn around all of them |
 | `min_lon`, `min_lat`, `max_lon`, `max_lat` | Optional manual override |
 | `title`, `notes` | Optional |
 
@@ -236,7 +236,7 @@ map-library-atlas/
 4. **Gold:** done. GeoJSON export and needs-review list.
 5. **Viewer:** done. Base map, bbox layer, click popup listing all maps under the point.
 6. **Polish:** partly done. Docs, tests and incremental bronze exist. Open items are listed in `docs/DEVELOPER.md` section 12 (duplicates, same-named files in the manifest, multi-page PDFs, scale).
-7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done. Next: several place labels per map with a ready-made list of countries and US states, publisher and source link; then add-and-label screens in the browser.
+7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done; ready-made list of US places and several places per map done. Next: a label screen in the browser, a double-click launcher, bulk labelling, drag-and-drop adding. Publisher and source link, and other countries, come later.
 
 **MVP done when:** I run one command and see rectangles for all my located maps on a global map, plus a list of the ones I still need to locate. **Met for the test folder** (`atlas run`, then `atlas view`). Not yet run on the full library.
 

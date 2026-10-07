@@ -259,7 +259,7 @@ adds a blank row whenever it sees a new map, and never changes what you have typ
 |---|---|
 | `file_name` | Filled in by the tool. Leave it alone; it is how a row is matched to a map. |
 | `revisit` | `yes` to park this map as "come back to this later". Blank otherwise. |
-| `region_key` | A region name from `regions.csv`, e.g. `wisconsin`. |
+| `region_key` | A place from `regions.csv`, e.g. `wisconsin`. For several, separate them with semicolons: `new_york; connecticut; new_jersey`. |
 | `min_lon`, `min_lat`, `max_lon`, `max_lat` | Your own box: west, south, east and north edges, in degrees. Fill in all four or none. |
 | `title` | A nicer name for the map. Blank means "use the tidied-up file name". |
 | `notes` | Anything you like. Shown next to parked maps. |
@@ -267,9 +267,23 @@ adds a blank row whenever it sees a new map, and never changes what you have typ
 Tips: longitudes in the US are negative. If you edit in Numbers, use File > Export To >
 CSV; a normal save produces a file the tool cannot read.
 
-**`config/regions.csv`** is the list of reusable region boxes. Each row is a short key,
-a name, and the four edges of the box. Right now it has one row, `wisconsin`, a rectangle
-around the whole state. Add a row here to create a new region (a county, another state).
+**`config/regions.csv`** is the list of places a map can be labelled with. Each row is a
+short key, a name, and the four edges of the place's box. It comes filled in with:
+
+- all 50 US states and the District of Columbia;
+- five US territories (American Samoa, Guam, Northern Mariana Islands, Puerto Rico,
+  US Virgin Islands);
+- `contiguous_united_states` (the lower 48) and `united_states` (all 50 states), for
+  national maps.
+
+Keys are the name in lower case with underscores: `wisconsin`, `new_york`,
+`district_of_columbia`. You can add your own rows (a county, a city, another country).
+
+The state boxes came from a public list of US state bounding boxes
+(https://gist.github.com/a8dx/2340f9527af64f8ef8439366de981168). One was adjusted:
+Alaska's islands cross the line on the far side of the world where longitude flips from
+-180 to +180, which made its box wrap around the whole globe. Its box here stops at that
+line, so a few of the westernmost Aleutian Islands fall outside it.
 
 ### Step 3: Silver (working out each map's box)
 
@@ -280,6 +294,7 @@ what its box is, or why it doesn't have one.
 
 1. **You typed your own box** → that box is used. Marked `manual_override`, `exact`.
 2. **You typed a region** → that region's box is used. Marked `region_default`, `approximate`.
+   With several regions, one box is drawn around all of them.
 3. **Neither** → no box. The map is marked `needs_georef` ("needs a location").
 
 If you typed both a box and a region, your box wins.
@@ -306,7 +321,7 @@ dashes turned into spaces (`Wisconsin_map.jpg` becomes "Wisconsin map").
 | `format` | `geopdf` (PDF with location inside), `pdf`, `jpg` or `png`. |
 | `width_px`, `height_px` | Picture size in pixels. Filled for images, blank for PDFs. |
 | `is_georeferenced`, `georef_method` | Whether the *file itself* carries a location. A fact about the file, not about the box. |
-| `region_key` | The region you typed, if any. |
+| `region_key` | The region or regions you typed, if any. |
 | `bbox_source` | Where the box came from: `manual_override`, `region_default` or `none`. |
 | `bbox_precision` | `exact` (your own box) or `approximate` (a region box). |
 | `source_crs` | Technical description of the coordinate system inside the file, where there is one. Safe to ignore. |

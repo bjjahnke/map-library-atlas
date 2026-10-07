@@ -24,4 +24,8 @@ Geospatial index of my local map collection (PDFs and images). Shows each map's 
 ## Current state
 `main` (tagged `v0.1`) is the working MVP on 26 test maps. Work in progress is on the branch `simpler-map-intake`; do not build on `main`.
 
-Direction: this is meant to grow into a shared map-finder platform stocked with my maps. Planned next, one step at a time: (1) several place labels per map with a ready-made list of countries and US states, plus publisher and source link; (2) add-and-label screens in the browser with drag-and-drop, replacing hand-editing of the manifest; (3) load the rest of my collection. Do not ingest the full collection yet.
+Direction: this is meant to grow into a shared map-finder platform stocked with my maps (about 200 US maps to start, a few per state). **Using the atlas must never need the terminal or hand-editing files; the terminal is for development only.**
+
+Done on the branch: library folder and `atlas add`; `config/regions.csv` with all US states and territories; several places per map (`;`-separated in `region_key`, one box around all).
+
+Planned next, one step at a time: (1) a "Label maps" screen in the browser: map cards with a preview, pick one or more places, save, replacing hand-editing of the manifest; (2) a double-click icon that opens the atlas; (3) bulk labelling and label suggestions from source folder names; (4) add maps by drag and drop; (5) test run on two or three state folders; (6) the rest of the US catalog. Later: publisher and source link per map, other countries. Do not ingest the full collection yet.

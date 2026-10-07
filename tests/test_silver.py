@@ -34,7 +34,11 @@ def write_pdf(path, viewports=()):
     return path
 
 
-REGIONS = {"wisconsin": {"min_lon": "-92.9", "min_lat": "42.5", "max_lon": "-86.8", "max_lat": "47.1"}}
+REGIONS = {
+    "wisconsin": {"min_lon": "-92.9", "min_lat": "42.5", "max_lon": "-86.8", "max_lat": "47.1"},
+    "minnesota": {"min_lon": "-97.2", "min_lat": "43.5", "max_lon": "-89.5", "max_lat": "49.4"},
+    "iowa": {"min_lon": "-96.6", "min_lat": "40.4", "max_lon": "-90.1", "max_lat": "43.5"},
+}
 
 
 def resolve(path, manual=None, use_embedded=True):
@@ -118,6 +122,16 @@ def test_region_key_gives_region_box_marked_approximate(tmp_path):
     assert box(row) == (-92.9, 42.5, -86.8, 47.1)
     assert (row["status"], row["bbox_source"], row["bbox_precision"]) == ("ok", "region_default", "approximate")
     assert row["region_key"] == "wisconsin"
+
+
+def test_several_regions_give_one_box_around_all_of_them(tmp_path):
+    row = resolve(write_pdf(tmp_path / "plain.pdf"), {"region_key": "Wisconsin; minnesota ;iowa"})
+    assert box(row) == (-97.2, 40.4, -86.8, 49.4)
+    assert (row["status"], row["bbox_source"], row["bbox_precision"]) == ("ok", "region_default", "approximate")
+    assert row["region_key"] == "wisconsin; minnesota; iowa"
+
+    typo = resolve(write_pdf(tmp_path / "plain.pdf"), {"region_key": "wisconsin; narnia"})
+    assert typo["status"] == "error" and "narnia" in typo["status_detail"]
 
 
 def test_manual_box_beats_region_and_embedded(tmp_path):

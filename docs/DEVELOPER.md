@@ -22,7 +22,7 @@ Last updated: 7 October 2026.
 | Config | PyYAML | `config.yaml` |
 | Viewer | MapLibre GL JS 5.6.0 from the unpkg CDN | Globe, boxes, pop-up |
 | Base map | OpenStreetMap raster tiles | Background imagery, no API key |
-| Tests | pytest | 41 tests in `tests/` |
+| Tests | pytest | 45 tests in `tests/` |
 
 Not installed, although named in the plan: standalone GDAL (`osgeo`), pyproj, shapely.
 rasterio covers reprojection, and a bounding-box polygon is built by hand in `gold.py`.
@@ -261,7 +261,25 @@ Columns: `file_name, revisit, region_key, min_lon, min_lat, max_lon, max_lat, ti
 ### `config/regions.csv`
 
 Columns: `region_key, region_name, min_lon, min_lat, max_lon, max_lat`. Keys are matched
-case-insensitively.
+case-insensitively. Committed to the repository.
+
+Ships with 58 rows: 50 states, DC, 5 territories, `contiguous_united_states` and
+`united_states`. State boxes are from
+https://gist.github.com/a8dx/2340f9527af64f8ef8439366de981168 (columns `STATEFP`,
+`STUSPS`, `NAME`, `xmin`, `ymin`, `xmax`, `ymax`; it appears to be derived from US Census
+boundary files). Changes made when importing:
+
+- Keys are the name lower-cased with underscores. Two long names were shortened:
+  "Northern Mariana Islands" and "US Virgin Islands".
+- **Alaska's `max_lon` was changed from 179.77847 to -129.97.** The source box spans the
+  antimeridian and would fail validation (wider than 180 degrees). The replacement is an
+  approximate eastern limit of the state, entered by hand; Aleutian islands west of 180
+  degrees are outside the box.
+- The two country rows are computed: the min/max over the lower 48 plus DC, and over all
+  50 states plus DC (with the adjusted Alaska). Territories are not included in either.
+
+`tests/test_regions.py` checks the shipped file: row count, every box valid, and the
+country boxes containing their states.
 
 ---
 
@@ -279,7 +297,7 @@ One row per bronze row.
 | `width_px`, `height_px` | INTEGER | Rasters only. |
 | `is_georeferenced` | BOOLEAN | Whether the file carries georeferencing. |
 | `georef_method` | VARCHAR | `embedded` or `none`. |
-| `region_key` | VARCHAR | From the manifest, lower-cased. |
+| `region_key` | VARCHAR | From the manifest, lower-cased. Several keys are stored as `a; b; c`. |
 | `bbox_source` | VARCHAR | `manual_override`, `embedded`, `region_default`, `none`. |
 | `bbox_precision` | VARCHAR | `exact` or `approximate`; NULL without a box. |
 | `source_crs` | VARCHAR | `EPSG:n` if recognised, else WKT. Only for files with georeferencing. |
@@ -297,7 +315,8 @@ the box actually came from. With `use_embedded_location: false` a GeoPDF can be
 1. If bronze recorded a read error, stop: `status = error`.
 2. Manifest box, if all four cells are filled → `manual_override`, `exact`.
 3. Embedded georeferencing, **only if** `use_embedded_location` is true → `embedded`, `exact`.
-4. Region box via `region_key` → `region_default`, `approximate`.
+4. Region box via `region_key` → `region_default`, `approximate`. The cell may hold several
+   keys separated by `;`; the box is the min/max over all of them. Any unknown key is an error.
 5. Otherwise `needs_georef`.
 
 Then `_validate` runs on whatever box was chosen. A failure sets `status = error` and
@@ -408,6 +427,10 @@ would not work. Silver flags such boxes as errors, so none reach the viewer.
 - **Manifest joins on file name.** Two different maps with the same original name are
   kept apart in the library and in bronze, but share one manifest row.
 - **Disk use doubles.** The library is a full copy.
+- **Multi-region boxes can cross the antimeridian.** Combining, say, Guam with a mainland
+  state gives a box wider than 180 degrees, which is flagged as an error.
+- **Region boxes are rectangles around irregular shapes.** `united_states` covers most
+  of Canada and a large part of the Pacific.
 - **Duplicates.** Exact copies share a `file_id`, hence a `map_id`. `duplicate_of` is
   never set, the silver CSV export shows one file name per `map_id`, and gold emits one
   row per distinct path. Untested on real data; the test folder has no duplicates.
@@ -433,7 +456,8 @@ All fixtures are generated in temporary folders; no real maps are needed or touc
 | `test_census.py` | 10 | Classification of each format, summary counts, error handling, read-only guarantee, CLI. |
 | `test_library.py` | 6 | Flat copy, same-name maps kept apart, same-content maps stored once, re-adding, index contents, originals untouched, CLI. |
 | `test_bronze.py` | 10 | Inventory, duplicate hashes, incremental re-runs and removals, original names, CSV export, manifest row and column maintenance, reading spreadsheet-saved CSVs, CLI. |
-| `test_silver.py` | 14 | Manual box, region default, precedence, the embedded switch, densification, inset viewports, manifest mistakes, revisit mark, validation. |
+| `test_regions.py` | 3 | The shipped place list: count, validity, country boxes contain their states. |
+| `test_silver.py` | 15 | Manual box, region default, precedence, the embedded switch, densification, inset viewports, manifest mistakes, revisit mark, validation. |
 | `test_gold.py` | 1 | GeoJSON contents, to-do list, re-runnability. |
 
 The viewer has no automated tests; it was checked by hand in a browser.
