@@ -23,11 +23,11 @@ Geospatial index of my local map collection (PDFs and images). Shows each map's 
 - Never commit map files, personal paths, `config.yaml`, `config/map_manifest.csv`, `library/`, or `data/`.
 
 ## Current state
-`main` (tagged `v0.1`) is the working MVP on 26 test maps. Work in progress is on the branch `simpler-map-intake`; do not build on `main`.
+`main` holds the current working version: the atlas as a local app (Globe, Label maps, Add maps). The tag `v0.1` marks the first MVP, before the library folder and the screens. **Do not build on `main`: start each new feature on its own branch, and merge only when I say so.**
 
 Direction: this is meant to grow into a shared map-finder platform stocked with my maps (about 200 US maps to start, a few per state). **Using the atlas must never need the terminal or hand-editing files; the terminal is for development only.**
 
-Done on the branch: library folder and `atlas add`; `config/regions.csv` with all US states and territories; several places per map (`;`-separated in `region_key`, one box around all); `atlas view` is now a small local web app (stdlib only) with three tabs: Globe; Label maps (preview, tag places, choose footprint, rename, park, filter by place, save); Add maps (drag and drop files or folders into the library).
+Done so far: library folder and `atlas add`; `config/regions.csv` with all US states and territories; several places per map (`;`-separated in `region_key`, one box around all); `atlas view` is now a small local web app (stdlib only) with three tabs: Globe; Label maps (preview, tag places, choose footprint, rename, park, filter by place, save); Add maps (drag and drop files or folders into the library).
 
 **New maps must arrive untagged.** I do not want places or footprints guessed from folder or file names; labelling is a manual QA step for now.
 

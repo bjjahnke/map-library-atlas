@@ -2,7 +2,7 @@
 
 > A geospatial index of my local map collection. Instead of browsing folders, I open a global base map and see the **footprint of every map I own**, so I know where I have coverage.
 
-> **Status (7 October 2026):** the MVP works end to end on a 26-map test folder. This
+> **Status (7 October 2026):** the atlas works end to end as a local app (add maps, label them, see them on the globe), tested on a few dozen maps. This
 > document has been updated to match what was built. Guides: `docs/QUICKSTART.md` (adding
 > maps), `docs/HOW_IT_WORKS.md` (plain-language walkthrough), `docs/DEVELOPER.md`
 > (technical reference, including every change from the original plan).
@@ -245,7 +245,7 @@ map-library-atlas/
 4. **Gold:** done. GeoJSON export and needs-review list.
 5. **Viewer:** done. Base map, bbox layer, click popup listing all maps under the point.
 6. **Polish:** partly done. Docs, tests and incremental bronze exist. Open items are listed in `docs/DEVELOPER.md` section 12 (duplicates, same-named files in the manifest, multi-page PDFs, scale).
-7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done; ready-made list of US places and several places per map done; a Label maps screen in the browser done (previews, tag places, choose footprint, rename, park, filter by place, save); an Add maps tab with drag and drop done (new maps arrive untagged by choice). Next: a double-click launcher, then bulk labelling. Publisher and source link, and other countries, come later.
+7. **Simpler intake (merged into `main`):** library folder and `atlas add` done; ready-made list of US places and several places per map done; a Label maps screen in the browser done (previews, tag places, choose footprint, rename, park, filter by place, save); an Add maps tab with drag and drop done (new maps arrive untagged by choice). Next: a double-click launcher, then bulk labelling. Publisher and source link, and other countries, come later.
 
 **MVP done when:** I run one command and see rectangles for all my located maps on a global map, plus a list of the ones I still need to locate. **Met for the test folder** (`atlas run`, then `atlas view`). Not yet run on the full library.
 
