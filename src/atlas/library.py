@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from atlas.census import MAP_EXTENSIONS, iter_files
 
 INDEX_NAME = "index.csv"
 INDEX_COLUMNS = ("file_id", "library_name", "original_name", "original_path", "added_at")
+_lock = threading.Lock()  # one add at a time, so the index is never written by two at once
 
 
 def read_index(library_dir: Path) -> list[dict]:
@@ -62,34 +64,60 @@ def _candidates(sources: list[Path], library_dir: Path) -> tuple[list[Path], lis
     return found, missing, not_maps
 
 
+def _present(library_dir: Path, index: list[dict]) -> tuple[list[dict], set[str]]:
+    """Index rows whose copy is still in the folder, and their fingerprints."""
+    kept = [row for row in index if (library_dir / row["library_name"]).is_file()]
+    return kept, {row["file_id"] for row in kept}
+
+
+def _store(source: Path, original_name: str, origin: str, library_dir: Path, index: list[dict]) -> dict:
+    """Copy one map into the library and return its new index row."""
+    file_id = hash_file(source)
+    name = Path(original_name).name
+    library_name = f"{Path(name).stem[:150]}__{file_id[:10]}{Path(name).suffix.lower()}"
+    shutil.copy2(source, library_dir / library_name)  # copy2 keeps the file's own dates
+    row = {
+        "file_id": file_id,
+        "library_name": library_name,
+        "original_name": name,
+        "original_path": origin,
+        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    index.append(row)
+    return row
+
+
 def add_maps(sources: list[Path], library_dir: Path) -> dict:
     """Copy every map under sources into the library. Maps already there are skipped."""
     library_dir.mkdir(parents=True, exist_ok=True)
-    index = read_index(library_dir)
-    # a map counts as present only if its copy is still in the folder
-    present = {row["file_id"] for row in index if (library_dir / row["library_name"]).is_file()}
-    index = [row for row in index if row["file_id"] in present]
-
     found, missing, not_maps = _candidates(sources, library_dir)
     added, already = [], 0
-    for path in found:
-        file_id = hash_file(path)
-        if file_id in present:
-            already += 1
-            continue
-        library_name = f"{path.stem[:150]}__{file_id[:10]}{path.suffix.lower()}"
-        shutil.copy2(path, library_dir / library_name)  # copy2 keeps the file's own dates
-        present.add(file_id)
-        index.append(
-            {
-                "file_id": file_id,
-                "library_name": library_name,
-                "original_name": path.name,
-                "original_path": str(path.resolve()),
-                "added_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            }
-        )
-        added.append(path.name)
-
-    _write_index(library_dir, index)
+    with _lock:
+        index, present = _present(library_dir, read_index(library_dir))
+        for path in found:
+            if hash_file(path) in present:
+                already += 1
+                continue
+            row = _store(path, path.name, str(path.resolve()), library_dir, index)
+            present.add(row["file_id"])
+            added.append(path.name)
+        _write_index(library_dir, index)
     return {"added": added, "already_in_library": already, "not_maps": not_maps, "missing": missing}
+
+
+def add_file(source: Path, original_name: str, origin: str, library_dir: Path) -> str:
+    """Add one file that arrived under another name (an upload from the Add maps screen).
+
+    `origin` is recorded as where it came from. Returns "added", "already" or "not_map".
+    """
+    name = Path(original_name).name
+    if Path(name).suffix.lower() not in MAP_EXTENSIONS or name.startswith("."):
+        return "not_map"
+    library_dir.mkdir(parents=True, exist_ok=True)
+    with _lock:
+        index, present = _present(library_dir, read_index(library_dir))
+        if hash_file(source) in present:
+            return "already"
+        _store(source, name, origin, library_dir, index)
+        _write_index(library_dir, index)
+    return "added"

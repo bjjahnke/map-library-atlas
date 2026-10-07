@@ -2,7 +2,7 @@ import csv
 
 from atlas.bronze import build_inventory, read_inventory
 from atlas.cli import main
-from atlas.library import add_maps, original_names, read_index
+from atlas.library import add_file, add_maps, original_names, read_index
 
 
 def make_sources(tmp_path):
@@ -62,6 +62,20 @@ def test_missing_path_and_deleted_copy(tmp_path):
     next(p for p in library.iterdir() if p.name != "index.csv").unlink()
     assert add_maps([source / "roads.JPG"], library)["added"] == ["roads.JPG"]  # copied back
     assert len(read_index(library)) == 1
+
+
+def test_add_file_takes_an_upload_under_its_real_name(tmp_path):
+    library, staged = tmp_path / "library", tmp_path / "upload"
+    staged.write_bytes(b"a dropped map")
+    assert add_file(staged, "Minnesota/Roads Map.PDF", "added from the browser: Minnesota/Roads Map.PDF", library) == "added"
+    assert add_file(staged, "another name.pdf", "x", library) == "already"
+    assert add_file(staged, "notes.txt", "x", library) == "not_map"
+    assert add_file(staged, ".hidden.pdf", "x", library) == "not_map"
+
+    (row,) = read_index(library)
+    assert (row["original_name"], row["original_path"]) == ("Roads Map.PDF", "added from the browser: Minnesota/Roads Map.PDF")
+    assert row["library_name"].startswith("Roads Map__") and row["library_name"].endswith(".pdf")
+    assert (library / row["library_name"]).read_bytes() == b"a dropped map"
 
 
 def test_library_feeds_the_inventory_with_original_names(tmp_path):

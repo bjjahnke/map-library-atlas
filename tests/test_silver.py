@@ -164,6 +164,30 @@ def test_manifest_mistakes_are_flagged(tmp_path):
     assert swapped["status"] == "error"
 
 
+def test_places_are_tags_and_the_footprint_is_a_separate_choice(tmp_path):
+    path = write_pdf(tmp_path / "plain.pdf")
+
+    # tagged Wisconsin, but the statewide rectangle would be wrong for it
+    tagged = resolve(path, {"region_key": "wisconsin", "footprint": "none", "revisit": "yes", "notes": "Buffalo County"})
+    assert (tagged["status"], tagged["bbox_source"], tagged["min_lon"]) == ("needs_georef", "none", None)
+    assert tagged["region_key"] == "wisconsin"  # the tag is kept
+    assert tagged["status_detail"] == "marked to come back to: Buffalo County; tagged only; no footprint yet"
+
+    own = resolve(path, MANUAL_BOX | {"region_key": "wisconsin", "footprint": "own"})
+    assert (own["bbox_source"], box(own), own["region_key"]) == ("manual_override", (-89.6, 42.98, -89.15, 43.2), "wisconsin")
+
+    waiting = resolve(path, {"region_key": "wisconsin", "footprint": "own"})
+    assert waiting["status"] == "needs_georef" and "none has been entered" in waiting["status_detail"]
+
+    # "places" ignores a leftover own box
+    around = resolve(path, MANUAL_BOX | {"region_key": "wisconsin", "footprint": "places"})
+    assert (around["bbox_source"], box(around)) == ("region_default", (-92.9, 42.5, -86.8, 47.1))
+
+    # rows from before the column existed behave as they always did
+    assert resolve(path, MANUAL_BOX | {"region_key": "wisconsin"})["bbox_source"] == "manual_override"
+    assert resolve(path, {"region_key": "wisconsin"})["bbox_source"] == "region_default"
+
+
 def test_revisit_mark(tmp_path):
     path = write_pdf(tmp_path / "plain.pdf")
 
@@ -175,7 +199,7 @@ def test_revisit_mark(tmp_path):
     assert (placeholder["status"], placeholder["bbox_source"]) == ("ok", "region_default")
     assert placeholder["status_detail"] == "marked to come back to"
 
-    assert resolve(path, {"revisit": "no"})["status_detail"] == "no box or region entered in the manifest"
+    assert resolve(path, {"revisit": "no"})["status_detail"] == "no places or footprint yet"
 
 
 def test_clean_title():
@@ -192,7 +216,7 @@ def test_build_and_export(tmp_path):
     build_inventory(folder, db)
 
     assert build_silver(db) == {"total": 2, "ok": 0, "needs_georef": 2, "error": 0, "revisit": 0}
-    manifest = {"plain.pdf": {"file_name": "plain.pdf", "region_key": "wisconsin"}}
+    manifest = [{"file_name": "plain.pdf", "region_key": "wisconsin"}]
     assert build_silver(db, manifest, REGIONS) == {"total": 2, "ok": 1, "needs_georef": 1, "error": 0, "revisit": 0}
     assert build_silver(db, manifest, REGIONS, use_embedded=True)["ok"] == 2
     assert export_csv(db, out) == 2  # re-running does not duplicate rows

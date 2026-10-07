@@ -137,7 +137,7 @@ A second table, `gold.needs_review`, lists maps with `status != ok` for the revi
 
 Manual data is **reference/seed data that you maintain by hand**. It is not a medallion layer, and it is never edited into bronze. It enters at **silver**, where it's joined to the raw inventory.
 
-Two small, human-edited files (CSV or YAML), tracked in `config/`:
+Two small files (CSV) in `config/`. The manifest is normally edited through the **Label maps** screen, which writes it; it can still be edited by hand:
 
 **`regions.csv`**: reusable default boxes. Ships with all US states, DC, five territories, and two whole-country entries (58 rows)
 
@@ -149,13 +149,17 @@ Two small, human-edited files (CSV or YAML), tracked in `config/`:
 
 | Column | Notes |
 |---|---|
-| `file_name` | Which map this row describes. Matching is by file name only |
+| `file_id` | Which map this row describes (content hash). Filled in by the pipeline |
+| `file_name` | The map's original name, for readability |
 | `revisit` | `yes` to mark the map as one to come back to |
 | `region_key` | Optional place, e.g. `wisconsin`. Several may be given, separated by `;`, and the box is drawn around all of them |
-| `min_lon`, `min_lat`, `max_lon`, `max_lat` | Optional manual override |
+| `footprint` | How the shape on the globe is decided: `places`, `own`, or `none` (tagged only). Blank = own box if present, else places |
+| `min_lon`, `min_lat`, `max_lon`, `max_lat` | The map's own rectangle, used when `footprint` is `own` |
 | `title`, `notes` | Optional |
 
-**Bbox resolution order (silver):**
+**Places are tags; the footprint is a separate choice.** "Footprint" means the shape drawn on the globe. It is a rectangle for now; true map outlines are a later goal (see Section 3, out of scope).
+
+**Bbox resolution order (silver), for rows with a blank `footprint`:**
 1. Manual override in the manifest → `exact`
 2. Embedded georeferencing → `exact`. **Skipped unless `use_embedded_location: true`** (off by default)
 3. Region default via `region_key` → `approximate`
@@ -208,14 +212,19 @@ map-library-atlas/
 │   ├── bronze.py              # scan library, hash, inventory
 │   ├── manifest.py            # reads and maintains the manual CSVs
 │   ├── silver.py              # resolve bbox, validate
-│   └── gold.py                # gold tables, GeoJSON and to-do list export
+│   ├── gold.py                # gold tables, GeoJSON and to-do list export
+│   ├── pipeline.py            # runs bronze, silver, gold in order
+│   └── server.py              # local web app: page, JSON API, label saving, previews
 ├── library/                   # gitignored: the atlas's copies of the maps + index.csv
 ├── data/                      # gitignored
 │   ├── atlas.duckdb
 │   ├── bronze/ silver/ gold/
 ├── viewer/
-│   ├── index.html
-│   └── app.js                 # MapLibre, loads gold GeoJSON
+│   ├── index.html             # one page, two tabs
+│   ├── style.css
+│   ├── app.js                 # Globe tab: MapLibre, loads gold GeoJSON
+│   ├── labels.js              # Label maps tab
+│   └── add.js                 # Add maps tab
 ├── tests/
 └── docs/
     ├── QUICKSTART.md
@@ -236,7 +245,7 @@ map-library-atlas/
 4. **Gold:** done. GeoJSON export and needs-review list.
 5. **Viewer:** done. Base map, bbox layer, click popup listing all maps under the point.
 6. **Polish:** partly done. Docs, tests and incremental bronze exist. Open items are listed in `docs/DEVELOPER.md` section 12 (duplicates, same-named files in the manifest, multi-page PDFs, scale).
-7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done; ready-made list of US places and several places per map done. Next: a label screen in the browser, a double-click launcher, bulk labelling, drag-and-drop adding. Publisher and source link, and other countries, come later.
+7. **Simpler intake (in progress, branch `simpler-map-intake`):** library folder and `atlas add` done; ready-made list of US places and several places per map done; a Label maps screen in the browser done (previews, tag places, choose footprint, rename, park, filter by place, save); an Add maps tab with drag and drop done (new maps arrive untagged by choice). Next: a double-click launcher, then bulk labelling. Publisher and source link, and other countries, come later.
 
 **MVP done when:** I run one command and see rectangles for all my located maps on a global map, plus a list of the ones I still need to locate. **Met for the test folder** (`atlas run`, then `atlas view`). Not yet run on the full library.
 

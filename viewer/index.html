@@ -5,34 +5,82 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Map Library Atlas</title>
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" />
-    <style>
-      html, body, #map { height: 100%; margin: 0; }
-      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0b1020; }
-
-      #summary {
-        position: absolute; top: 12px; left: 12px; z-index: 1;
-        background: rgba(255, 255, 255, 0.92); color: #1c2333;
-        padding: 8px 12px; border-radius: 6px; font-size: 13px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-      }
-      #summary strong { display: block; font-size: 14px; }
-
-      .maplibregl-popup-content { padding: 0; border-radius: 8px; overflow: hidden; }
-      .map-list-header {
-        padding: 10px 34px 8px 12px; font-size: 13px; font-weight: 600;
-        color: #1c2333; border-bottom: 1px solid #dde1ea;
-      }
-      .map-list { max-height: 260px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
-      .map-list li { padding: 8px 12px; border-bottom: 1px solid #eef0f5; }
-      .map-list li:last-child { border-bottom: none; }
-      .map-title { font-size: 13px; color: #1c2333; }
-      .map-path { font-size: 11px; color: #68718a; margin-top: 2px; overflow-wrap: anywhere; }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="summary"><strong>Map Library Atlas</strong><span id="summary-text">Loading…</span></div>
-    <div id="map"></div>
+    <header id="topbar">
+      <span id="brand">Map Library Atlas</span>
+      <nav role="tablist">
+        <button class="tab active" role="tab" data-tab="globe" aria-selected="true">Globe</button>
+        <button class="tab" role="tab" data-tab="labels" aria-selected="false">Label maps</button>
+        <button class="tab" role="tab" data-tab="add" aria-selected="false">Add maps</button>
+      </nav>
+      <span id="summary-text">Loading…</span>
+    </header>
+
+    <main>
+      <section id="tab-globe" class="panel active">
+        <div id="map"></div>
+      </section>
+
+      <section id="tab-labels" class="panel">
+        <div id="label-toolbar">
+          <div class="filters" role="group" aria-label="Which maps to show">
+            <button class="filter active" data-filter="all">All <span id="count-all"></span></button>
+            <button class="filter" data-filter="todo">Not on the globe <span id="count-todo"></span></button>
+            <button class="filter" data-filter="revisit">Come back to <span id="count-revisit"></span></button>
+          </div>
+          <select id="place-filter" aria-label="Show maps in one place"></select>
+          <input id="search" type="search" placeholder="Search by name, title or place" aria-label="Search maps" />
+          <span id="save-status" aria-live="polite"></span>
+          <button id="save" disabled>Save</button>
+        </div>
+        <details id="how-to" open>
+          <summary>How to label maps</summary>
+          <ol>
+            <li>Each card below is one map from your library. Click its picture to open the map and see what it shows.</li>
+            <li><b>Places this map is in</b> are tags: they say where the map is, so you can find it later. Start typing a state and pick it from the list. Add as many as apply.</li>
+            <li><b>Footprint on the globe</b> is the shape drawn for the map. Choose a rectangle around its places, its own rectangle, or none yet.</li>
+            <li>Click <b>Save</b> at the top right. Maps with a footprint appear on the <b>Globe</b> tab.</li>
+          </ol>
+          <p>Example: a county map in Wisconsin is tagged Wisconsin, but a statewide rectangle would be wrong for it. Choose "None yet", or enter its own rectangle.</p>
+          <p>Not sure about a map? Tick <b>Come back to this one</b> and find it later under the <b>Come back to</b> button. A title is optional; leave it empty to use the file name. The search box also finds maps by place.</p>
+        </details>
+        <div id="cards"></div>
+        <p id="empty" hidden>No maps match.</p>
+      </section>
+
+      <section id="tab-add" class="panel">
+        <div id="add-page">
+          <h2>Add maps to the atlas</h2>
+          <ol>
+            <li>Drag map files, or a whole folder of them, into the box below. Folders inside folders are fine.</li>
+            <li>Each map is copied into the atlas's library. Your original files are not changed or moved.</li>
+            <li>New maps arrive with no places and no footprint. Go to <b>Label maps</b> to tag them yourself.</li>
+          </ol>
+          <div id="drop-zone">
+            <p class="drop-title">Drop map files or a folder here</p>
+            <p class="drop-hint">PDF, JPG, PNG or TIFF</p>
+            <p>
+              <button id="choose-files" type="button">Choose files…</button>
+              <button id="choose-folder" type="button">Choose a folder…</button>
+            </p>
+            <input id="pick-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff" hidden />
+            <input id="pick-folder" type="file" webkitdirectory hidden />
+          </div>
+          <p id="add-progress" aria-live="polite"></p>
+          <p id="add-summary" aria-live="polite"></p>
+          <button id="label-new" type="button" hidden>Label the new maps →</button>
+          <ul id="add-results"></ul>
+        </div>
+      </section>
+    </main>
+
+    <datalist id="region-names"></datalist>
+
     <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
     <script src="app.js"></script>
+    <script src="labels.js"></script>
+    <script src="add.js"></script>
   </body>
 </html>

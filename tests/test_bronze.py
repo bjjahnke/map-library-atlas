@@ -4,7 +4,7 @@ import pytest
 
 from atlas.bronze import build_inventory, export_csv, read_inventory
 from atlas.cli import main
-from atlas.manifest import ensure_manifest, load_manifest, load_regions
+from atlas.manifest import find_row, load_manifest, load_regions, sync_manifest, update_rows
 
 
 @pytest.fixture
@@ -80,39 +80,71 @@ def test_export_csv(maps_folder, tmp_path):
     assert rows[0]["size_bytes"] == "5"
 
 
+HEADER = "file_id,file_name,revisit,region_key,footprint,min_lon,min_lat,max_lon,max_lat,title,notes"
+
+
 def test_manifest_adds_blank_rows_and_keeps_edits(tmp_path):
     manifest = tmp_path / "config" / "map_manifest.csv"
-    assert ensure_manifest(manifest, ["b.jpg", "a.pdf"]) == 2
-    assert manifest.read_text().splitlines() == [
-        "file_name,revisit,region_key,min_lon,min_lat,max_lon,max_lat,title,notes",
-        "a.pdf,,,,,,,,",
-        "b.jpg,,,,,,,,",
-    ]
+    assert sync_manifest(manifest, [("id-b", "b.jpg"), ("id-a", "a.pdf")]) == 2
+    assert manifest.read_text().splitlines() == [HEADER, "id-a,a.pdf,,,,,,,,,", "id-b,b.jpg,,,,,,,,,"]
 
-    edited = manifest.read_text().replace("a.pdf,,,,,,,,", "a.pdf,,wisconsin,,,,,My title,a note").rstrip("\n")
+    edited = manifest.read_text().replace("id-a,a.pdf,,,,,,,,,", "id-a,a.pdf,,wisconsin,,,,,,My title,a note").rstrip("\n")
     manifest.write_text(edited)  # hand edit, saved without a trailing newline
-    assert ensure_manifest(manifest, ["a.pdf", "b.jpg", "c.png"]) == 1
-    assert ensure_manifest(manifest, ["a.pdf", "b.jpg", "c.png"]) == 0
+    maps = [("id-a", "a.pdf"), ("id-b", "b.jpg"), ("id-c", "c.png")]
+    assert sync_manifest(manifest, maps) == 1
+    assert sync_manifest(manifest, maps) == 0
     assert manifest.read_text().splitlines()[1:] == [
-        "a.pdf,,wisconsin,,,,,My title,a note",
-        "b.jpg,,,,,,,,",
-        "c.png,,,,,,,,",
+        "id-a,a.pdf,,wisconsin,,,,,,My title,a note",
+        "id-b,b.jpg,,,,,,,,,",
+        "id-c,c.png,,,,,,,,,",
     ]
 
 
-def test_manifest_gains_new_columns_without_losing_edits(tmp_path):
+def test_old_manifest_is_upgraded_without_losing_edits(tmp_path):
     manifest = tmp_path / "map_manifest.csv"
-    manifest.write_text(
+    manifest.write_text(  # written before the file_id and revisit columns existed
         "file_name,region_key,min_lon,min_lat,max_lon,max_lat,title,notes,my_own_column\n"
         'a.pdf,wisconsin,,,,,"Title, with comma","line one\nline two",keep me\n'
     )
-    assert ensure_manifest(manifest, ["a.pdf"]) == 0
-    assert manifest.read_text().splitlines()[0] == (
-        "file_name,revisit,region_key,min_lon,min_lat,max_lon,max_lat,title,notes,my_own_column"
-    )
-    row = load_manifest(manifest)["a.pdf"]
-    assert (row["revisit"], row["region_key"], row["title"]) == ("", "wisconsin", "Title, with comma")
+    assert sync_manifest(manifest, [("id-a", "a.pdf")]) == 0
+    assert manifest.read_text().splitlines()[0] == HEADER + ",my_own_column"
+    row = find_row(load_manifest(manifest), "id-a", "a.pdf")
+    assert (row["file_id"], row["revisit"], row["region_key"], row["title"]) == ("id-a", "", "wisconsin", "Title, with comma")
     assert (row["notes"], row["my_own_column"]) == ("line one\nline two", "keep me")
+
+
+def test_two_maps_with_the_same_name_get_their_own_rows(tmp_path):
+    manifest = tmp_path / "map_manifest.csv"
+    sync_manifest(manifest, [("id-1", "map.pdf"), ("id-2", "map.pdf")])
+    update_rows(manifest, {"id-2": {"region_key": "iowa"}})
+    rows = load_manifest(manifest)
+    assert find_row(rows, "id-1", "map.pdf")["region_key"] == ""
+    assert find_row(rows, "id-2", "map.pdf")["region_key"] == "iowa"
+
+
+def test_update_rows_only_touches_label_fields(tmp_path):
+    manifest = tmp_path / "map_manifest.csv"
+    sync_manifest(manifest, [("id-a", "a.pdf")])
+    changes = {"id-a": {"title": " New ", "revisit": "yes", "file_name": "hacked", "file_id": "x"}, "nope": {"title": "x"}}
+    assert update_rows(manifest, changes) == 1
+    assert update_rows(manifest, changes) == 0  # nothing left to change
+    row = load_manifest(manifest)[0]
+    assert (row["title"], row["revisit"], row["file_name"], row["file_id"]) == ("New", "yes", "a.pdf", "id-a")
+
+
+def test_load_manual_files(tmp_path):
+    manifest = tmp_path / "map_manifest.csv"
+    # saved from a spreadsheet app: byte-order mark, Windows line endings, stray spaces
+    manifest.write_bytes(
+        "\ufefffile_name,region_key,min_lon,min_lat,max_lon,max_lat,title,notes\r\n"
+        "a.pdf, Wisconsin ,,,,,,\r\n".encode()
+    )
+    assert find_row(load_manifest(manifest), "any-id", "a.pdf")["region_key"] == "Wisconsin"
+    assert load_manifest(tmp_path / "missing.csv") == []
+
+    regions = tmp_path / "regions.csv"
+    regions.write_text("region_key,region_name,min_lon,min_lat,max_lon,max_lat\nWisconsin,Wisconsin,-92.9,42.5,-86.8,47.1\n")
+    assert load_regions(regions)["wisconsin"]["max_lat"] == "47.1"
 
 
 def test_cli_run(maps_folder, tmp_path, capsys):
@@ -125,18 +157,3 @@ def test_cli_run(maps_folder, tmp_path, capsys):
     assert "Maps in the library: 3" in capsys.readouterr().out
     assert (tmp_path / "data" / "bronze" / "file_inventory.csv").is_file()
     assert (tmp_path / "config" / "map_manifest.csv").is_file()
-
-
-def test_load_manual_files(tmp_path):
-    manifest = tmp_path / "map_manifest.csv"
-    # saved from a spreadsheet app: byte-order mark, Windows line endings, stray spaces
-    manifest.write_bytes(
-        "\ufefffile_name,region_key,min_lon,min_lat,max_lon,max_lat,title,notes\r\n"
-        "a.pdf, Wisconsin ,,,,,,\r\n".encode()
-    )
-    assert load_manifest(manifest)["a.pdf"]["region_key"] == "Wisconsin"
-    assert load_manifest(tmp_path / "missing.csv") == {}
-
-    regions = tmp_path / "regions.csv"
-    regions.write_text("region_key,region_name,min_lon,min_lat,max_lon,max_lat\nWisconsin,Wisconsin,-92.9,42.5,-86.8,47.1\n")
-    assert load_regions(regions)["wisconsin"]["max_lat"] == "47.1"

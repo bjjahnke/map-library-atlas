@@ -1,7 +1,8 @@
 """Silver layer: one row per map with its bounding box in WGS84 (EPSG:4326).
 
-Bbox resolution order: manual box in the manifest, then (only if switched on in
-config) the location stored inside the file, then the region default, else `needs_georef`.
+A map's places are tags. Its footprint (the shape drawn on the globe, for now always a
+rectangle) is decided by the manifest's `footprint` column: around its places, its own box,
+or none yet. See `resolve_map`.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import numpy as np
 from rasterio.crs import CRS
 from rasterio.warp import transform, transform_bounds
 
-from atlas.manifest import is_flagged
+from atlas.manifest import BOX_FIELDS, find_row, footprint_mode, is_flagged, split_regions
 
 DENSIFY_POINTS = 21
 
@@ -136,9 +137,6 @@ def _validate(bbox) -> str | None:
     return None
 
 
-BOX_FIELDS = ("min_lon", "min_lat", "max_lon", "max_lat")
-
-
 def _embedded_bbox(meta: dict):
     """(bbox, source_crs, note) from location stored inside the file, or None if there is none."""
     if meta.get("geo_viewports"):
@@ -182,8 +180,7 @@ def resolve_map(
     manual = manual or {}
     regions = regions or {}
     base_format = {"jpeg": "jpg", "tif": "tiff"}.get(extension, extension)
-    # one or more regions, separated by semicolons
-    region_keys = [key.strip().lower() for key in manual.get("region_key", "").split(";") if key.strip()]
+    region_keys = split_regions(manual.get("region_key", ""))  # one or more
     # "come back to this one": stays visible in status_detail whether or not it has a box yet
     revisit = "marked to come back to" if is_flagged(manual) else None
     if revisit and manual.get("notes"):
@@ -200,7 +197,7 @@ def resolve_map(
         "region_key": "; ".join(region_keys) or None,
         "bbox_source": "none",
         "status": "needs_georef",
-        "status_detail": revisit or "no box or region entered in the manifest",
+        "status_detail": revisit or "no places or footprint yet",
     }
     if "error" in meta:
         return row | {"status": "error", "status_detail": meta["error"]}
@@ -217,13 +214,23 @@ def resolve_map(
         if embedded:
             row["source_crs"] = embedded[1]
 
+    mode = footprint_mode(manual)
+
+    def without_footprint(reason: str) -> dict:
+        return row | {"status_detail": "; ".join(filter(None, (revisit, reason)))}
+
+    if mode == "none":
+        return without_footprint("tagged only; no footprint yet")
+
     try:
-        manual_box = _box_from_fields(manual, "the box in the manifest")
+        manual_box = _box_from_fields(manual, "the map's own box") if mode != "places" else None
         if manual_box:
             bbox, source, precision, note = manual_box, "manual_override", "exact", None
-        elif use_embedded and embedded_error:
+        elif mode == "own":
+            return without_footprint("set to use its own box, but none has been entered")
+        elif mode == "" and use_embedded and embedded_error:
             raise ValueError(embedded_error)
-        elif use_embedded and embedded:
+        elif mode == "" and use_embedded and embedded:
             bbox, source, precision, note = embedded[0], "embedded", "exact", embedded[2]
         elif region_keys:
             unknown = [key for key in region_keys if key not in regions]
@@ -262,12 +269,12 @@ def resolve_map(
 
 def build_silver(
     db_path: Path,
-    manifest: dict[str, dict] | None = None,
+    manifest: list[dict] | None = None,
     regions: dict[str, dict] | None = None,
     use_embedded: bool = False,
 ) -> dict:
     """Rebuild silver.maps from bronze and the manual inputs. Always recomputed in full."""
-    manifest = manifest or {}
+    manifest = manifest or []
     with duckdb.connect(str(db_path)) as con:
         bronze = con.execute(
             "SELECT file_id, file_name, extension, raw_metadata FROM bronze.file_inventory "
@@ -279,7 +286,7 @@ def build_silver(
                 file_name,
                 extension,
                 json.loads(raw) if raw else None,
-                manifest.get(file_name),
+                find_row(manifest, file_id, file_name),
                 regions,
                 use_embedded,
             )

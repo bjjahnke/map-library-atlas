@@ -41,11 +41,12 @@ Rebuilds the list of maps, their boxes, and the files the globe reads, from the 
 .venv/bin/atlas view
 ```
 
-Opens the globe in your browser. Press Ctrl+C in the terminal to stop it.
+Opens the atlas in your browser: a **Globe** tab, a **Label maps** tab where you tag each
+map with its places, and an **Add maps** tab where you drop in new maps. Press Ctrl+C in the terminal to stop it.
 
 ## The one rule
 
-- `config/` is yours to edit. `config/map_manifest.csv` is where you say where each map belongs.
+- `config/` holds your labels and the list of places. You change labels on the Label maps tab, which saves them there.
 - `library/` holds the atlas's copies of your maps. Add with `atlas add`; delete a file to remove a map.
 - `data/` is rebuilt by the tool on every run. Don't edit it by hand.
 

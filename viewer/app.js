@@ -1,6 +1,6 @@
 // Globe viewer: draws each map's box and lists every map under the point you click.
 
-const GEOJSON_URL = "../data/gold/map_library.geojson";
+const GEOJSON_URL = "/data/gold/map_library.geojson";
 const BOX_COLOR = "#d9480f";
 
 const map = new maplibregl.Map({
@@ -63,7 +63,7 @@ function popupContent(found) {
   return wrapper;
 }
 
-async function loadMaps() {
+async function loadMaps({ fit = true } = {}) {
   const summary = document.getElementById("summary-text");
   let collection;
   try {
@@ -71,27 +71,29 @@ async function loadMaps() {
     if (!response.ok) throw new Error(response.statusText);
     collection = await response.json();
   } catch (error) {
-    summary.textContent = "No map file found. Run `atlas run` first.";
+    summary.textContent = "No maps to show yet.";
     return;
   }
 
   maps = collection.features.map((feature) => ({ ...feature.properties, box: boxOf(feature) }));
-  summary.textContent = `${maps.length} maps · click a box to list them`;
-  if (!maps.length) return;
+  summary.textContent = maps.length === 1 ? "1 map on the globe" : `${maps.length} maps on the globe`;
 
   // Many maps share an identical box. Draw each distinct box once so stacked copies
   // don't pile up into a solid block; the click list still shows every map.
   const distinct = new Map(collection.features.map((f) => [JSON.stringify(f.geometry), f.geometry]));
-  map.addSource("boxes", {
-    type: "geojson",
-    data: {
-      type: "FeatureCollection",
-      features: [...distinct.values()].map((geometry) => ({ type: "Feature", properties: {}, geometry })),
-    },
-  });
-  map.addLayer({ id: "box-fill", type: "fill", source: "boxes", paint: { "fill-color": BOX_COLOR, "fill-opacity": 0.1 } });
-  map.addLayer({ id: "box-outline", type: "line", source: "boxes", paint: { "line-color": BOX_COLOR, "line-width": 2 } });
+  const boxes = {
+    type: "FeatureCollection",
+    features: [...distinct.values()].map((geometry) => ({ type: "Feature", properties: {}, geometry })),
+  };
+  if (map.getSource("boxes")) {
+    map.getSource("boxes").setData(boxes);
+  } else {
+    map.addSource("boxes", { type: "geojson", data: boxes });
+    map.addLayer({ id: "box-fill", type: "fill", source: "boxes", paint: { "fill-color": BOX_COLOR, "fill-opacity": 0.1 } });
+    map.addLayer({ id: "box-outline", type: "line", source: "boxes", paint: { "line-color": BOX_COLOR, "line-width": 2 } });
+  }
 
+  if (!fit || !maps.length) return;
   const all = maps.map((m) => m.box);
   map.fitBounds(
     [
@@ -102,7 +104,18 @@ async function loadMaps() {
   );
 }
 
-map.on("load", loadMaps);
+// Used by the label screen: redraw after a save, and re-measure when the tab is shown again.
+let ready = false; // the map cannot take data until its style has loaded
+window.atlasGlobe = {
+  reload: () => {
+    if (!ready) return; // the first load, still to come, will fetch the latest anyway
+    for (const popup of document.querySelectorAll(".maplibregl-popup")) popup.remove();
+    return loadMaps({ fit: maps.length === 0 });
+  },
+  resize: () => map.resize(),
+};
+
+map.on("load", () => { ready = true; loadMaps(); });
 
 map.on("click", (event) => {
   const found = mapsAt(event.lngLat);

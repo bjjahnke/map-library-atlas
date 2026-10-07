@@ -1,4 +1,5 @@
-file_name,revisit,region_key,min_lon,min_lat,max_lon,max_lat,title,notes
-example_wisconsin_roadmap.pdf,,wisconsin,,,,,Wisconsin Road Map,Uses region default bbox
-example_madison_area.jpg,,,-89.60,42.98,-89.15,43.20,Madison Area,Manual bbox override
-example_county_plate.pdf,yes,,,,,,,Come back to this one: not sure which county it covers
+file_id,file_name,revisit,region_key,min_lon,min_lat,max_lon,max_lat,title,notes
+,example_wisconsin_roadmap.pdf,,wisconsin,,,,,Wisconsin Road Map,One state
+,example_northeast.pdf,,new_york; connecticut; new_jersey,,,,,Northeast Corridor,Several states: one box around all of them
+,example_madison_area.jpg,,,-89.60,42.98,-89.15,43.20,Madison Area,Its own exact box
+,example_county_plate.pdf,yes,,,,,,,Come back to this one: not sure which county it covers

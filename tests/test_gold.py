@@ -24,10 +24,10 @@ def test_gold_outputs(tmp_path):
         write_pdf(folder / name, width)
     db = tmp_path / "atlas.duckdb"
     geojson, review = tmp_path / "gold" / "map_library.geojson", tmp_path / "gold" / "needs_review.csv"
-    manifest = {
-        "located.pdf": {"region_key": "wisconsin", "title": "My Map"},
-        "parked.pdf": {"revisit": "yes", "notes": "which county?"},
-    }
+    manifest = [
+        {"file_name": "located.pdf", "region_key": "wisconsin", "title": "My Map"},
+        {"file_name": "parked.pdf", "revisit": "yes", "notes": "which county?"},
+    ]
     build_inventory(folder, db)
     build_silver(db, manifest, REGIONS)
 
